@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>doc editor</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#/">✶ doc editor</a>
+      <span id="doc-title" class="doc-title"></span>
+      <span class="spacer"></span>
+      <span id="status" class="status"></span>
+      <label class="ctrl">Model
+        <select id="sel-model">
+          <option value="">Default</option>
+          <option value="opus">Opus</option>
+          <option value="sonnet">Sonnet</option>
+          <option value="haiku">Haiku</option>
+        </select>
+      </label>
+      <label class="ctrl">Effort
+        <select id="sel-effort">
+          <option value="">Default</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="xhigh">X-High</option>
+          <option value="max">Max</option>
+        </select>
+      </label>
+      <label class="ctrl toggle" title="Let Claude search the web and read linked URLs">
+        <input type="checkbox" id="chk-web" />🌐 Web
+      </label>
+    </header>
+
+    <!-- HOME VIEW -->
+    <main id="view-home" class="view">
+      <section class="composer">
+        <h1>What do you want to write?</h1>
+        <p class="sub">Describe the document. Claude drafts it; then you select text and comment to refine.</p>
+        <textarea id="premise" placeholder="e.g. A one-page product brief for a tide-pool field guide app, friendly but precise…"></textarea>
+        <button id="create-btn" class="primary">Draft it →</button>
+      </section>
+
+      <section class="library">
+        <h2>Your documents</h2>
+        <ul id="doc-list" class="doc-list"></ul>
+      </section>
+    </main>
+
+    <!-- EDITOR VIEW -->
+    <main id="view-editor" class="view hidden">
+      <div class="editor-grid">
+        <article id="doc" class="doc"></article>
+
+        <aside class="sidebar">
+          <div class="panel">
+            <h3>
+              Conversation <span id="hist-count" class="count">0</span>
+              <button id="hist-toggle" class="mini" aria-expanded="false">show</button>
+            </h3>
+            <div id="history-wrap" class="hidden">
+              <p class="hint">What Claude remembers as context. Removing an item only affects future edits — it won't change the document.</p>
+              <ol id="history" class="history"></ol>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Comments <span id="comment-count" class="count">0</span></h3>
+            <p class="hint" id="comments-hint">Select text in the document to attach a comment.</p>
+            <ul id="comments" class="comments"></ul>
+          </div>
+
+          <div class="panel">
+            <h3>Whole-document change</h3>
+            <textarea id="instruction" placeholder="Optional: ask for a global change, e.g. 'make the tone more formal'…"></textarea>
+          </div>
+
+          <button id="revise-btn" class="primary" disabled>Send to Claude</button>
+          <button id="regen-btn" class="ghost">Regenerate from premise</button>
+        </aside>
+      </div>
+    </main>
+
+    <!-- Floating selection popover -->
+    <div id="sel-popover" class="sel-popover hidden">
+      <button id="sel-comment-btn">💬 Comment</button>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="/vendor/marked.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

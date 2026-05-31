@@ -39,7 +39,23 @@ npm start
 
 Requires the `claude` CLI installed and authenticated, plus Node 18+.
 
+## Tests
+
+```bash
+npm test            # fast offline unit suite (node:test) — no deps, no CLI
+npm run test:smoke  # opt-in end-to-end browser test (see test/README.md)
+```
+
+The smoke test needs the `claude` CLI, Google Chrome, and `playwright-core`
+(`npm i --no-save playwright-core`). See [`test/README.md`](test/README.md).
+
 ## Files
+
+- `server.js` — HTTP server, static hosting, JSON + SSE API
+- `lib/claude.js` — spawns the CLI: streaming generation + find/replace revision
+- `lib/docs.js` — Markdown + metadata persistence
+- `public/` — the single-page app (no build step)
+- `test/` — unit tests (`test/unit/`) + opt-in smoke test (`test/smoke.js`)
 
 - `server.js` — HTTP server, static hosting, JSON + SSE API
 - `lib/claude.js` — spawns the CLI: streaming generation + find/replace revision

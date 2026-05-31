@@ -1,0 +1,34 @@
+# Tests
+
+Two layers: a fast offline unit suite, and an opt-in end-to-end smoke test.
+
+## Unit tests — `npm test`
+
+Plain `node:test`, no dependencies, no network, no `claude` CLI. Covers the pure
+logic:
+
+- `unit/apply-edits.test.js` — find/replace application, ambiguous/missing matches, deletion
+- `unit/extract-edits.test.js` — tolerant JSON parsing (fences, stray prose, in-string braces)
+- `unit/flags.test.js` — model/effort whitelisting, web-tool flag building, request formatting
+- `unit/docs.test.js` — persistence, title derivation, history add/prune (run against a temp dir)
+
+These run in well under a second and are safe to run anywhere.
+
+## Smoke test — `npm run test:smoke`
+
+End-to-end: spawns the server on a spare port against a throwaway docs directory,
+drives the real UI in headless Chrome (generate → select text → comment → revise →
+conversation history), then tears everything down.
+
+**Opt-in, because it needs:**
+
+- the **`claude` CLI** installed and authenticated (generation actually calls it),
+- **Google Chrome** installed (driven via playwright-core's `chrome` channel),
+- **playwright-core**, which is *not* a project dependency — install it ad hoc:
+
+  ```bash
+  npm i --no-save playwright-core
+  npm run test:smoke
+  ```
+
+It's kept out of `npm test` on purpose: it's slow and depends on the CLI + network.

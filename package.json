@@ -6,7 +6,9 @@
   "description": "Personal browser doc editor backed by local Claude Code",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test test/unit/*.test.js",
+    "test:smoke": "node test/smoke.js"
   },
   "dependencies": {
     "express": "^4.19.2",

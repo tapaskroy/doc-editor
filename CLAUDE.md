@@ -130,14 +130,22 @@ timestamp-prefixed and filesystem-safe.
 
 ## Testing
 
-There is no automated test suite. Manual verification is done by driving the real
-app in a headless browser:
+Two layers (see `test/README.md`):
 
-- Backend paths: `curl` the JSON/SSE endpoints.
-- UI paths: `playwright-core` pointed at the system Chrome
-  (`chromium.launch({ channel: 'chrome' })`). Note `playwright-core` is **not** a
-  project dependency — install it ad hoc for a test run; don't add it to
-  `package.json`.
+- **`npm test`** — fast `node:test` unit suite under `test/unit/`. No deps, no
+  network, no CLI. Covers the pure logic: `applyEdits`, `extractEdits`, the
+  model/effort/tool flag builders, request formatting, and `docs.js` persistence
+  (run against a temp dir via the `DOC_EDITOR_DOCS_DIR` env override). Keep these
+  green and add to them when touching `lib/`.
+- **`npm run test:smoke`** — opt-in end-to-end test (`test/smoke.js`). Spawns the
+  server on a spare port against a throwaway docs dir and drives the real UI in
+  headless Chrome. Requires the `claude` CLI, Google Chrome, and `playwright-core`
+  (`npm i --no-save playwright-core` — it is intentionally **not** a project
+  dependency; don't add it to `package.json`).
+
+To keep `lib/` helpers testable they are exported from `lib/claude.js` even
+though they're internal; `lib/docs.js` honors `DOC_EDITOR_DOCS_DIR` so tests
+never touch the real `docs/`.
 
 ## Ideas / not yet built
 

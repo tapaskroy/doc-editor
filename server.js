@@ -9,6 +9,7 @@ const { marked } = require('marked');
 const docs = require('./lib/docs');
 const claude = require('./lib/claude');
 const exporter = require('./lib/export');
+const skills = require('./lib/skills');
 
 const PORT = process.env.PORT || 9999;
 const app = express();
@@ -33,6 +34,11 @@ const render = (md) => marked.parse(md || '');
 
 app.get('/api/docs', (req, res) => {
   res.json(docs.list());
+});
+
+// Available voice/style skills the user can write in.
+app.get('/api/skills', (req, res) => {
+  res.json(skills.list());
 });
 
 app.post('/api/docs', async (req, res) => {
@@ -93,6 +99,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
   const { premise, brief } = docs.readMeta(id);
   const { model, effort } = req.query;
   const web = req.query.web === 'true';
+  const style = req.query.skill ? skills.read(req.query.skill) : null;
   // A briefed doc generates from its structured brief; otherwise from the premise.
   const genPrompt = brief ? claude.briefToPrompt(brief) : premise;
   // Start the conversation fresh for this (re)generation; the premise is turn 1.
@@ -111,6 +118,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     model,
     effort,
     web,
+    style,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),
     onDone: (markdown) => {
@@ -164,7 +172,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
   const { id } = req.params;
   if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
 
-  const { comments = [], instruction = '', model, effort, web } = req.body || {};
+  const { comments = [], instruction = '', model, effort, web, skill } = req.body || {};
   if (!comments.length && !instruction.trim()) {
     return res.status(400).json({ error: 'no comments or instruction provided' });
   }
@@ -172,7 +180,8 @@ app.post('/api/docs/:id/revise', async (req, res) => {
   try {
     const markdown = docs.getMarkdown(id);
     const { history = [] } = docs.readMeta(id);
-    const { edits, request } = await claude.revise({ markdown, comments, instruction, history, model, effort, web });
+    const style = skill ? skills.read(skill) : null;
+    const { edits, request } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     const meta = docs.setMarkdown(id, updated);

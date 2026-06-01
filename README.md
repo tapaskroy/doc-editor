@@ -32,6 +32,11 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
 - **Web research** (🌐 toggle, on by default): Claude may use `WebSearch`/
   `WebFetch` to read linked URLs and look things up. Filesystem/shell tools are
   never exposed.
+- **Voice / style** (Style picker): write in a chosen *skill*. The app lists the
+  skills in `~/.claude/skills` and the project's `.claude/skills` (each a folder
+  with a `SKILL.md`); pick one and its guide is appended to the writing prompt so
+  drafts and revisions come out in that voice. No voice is baked into the app —
+  it's a file you select. (e.g. a personal `tapas-voice` skill.)
 - **Export** to HTML, PDF, Word (`.docx`), or PowerPoint (`.pptx`). HTML works
   out of the box; PDF needs Google Chrome (or `CHROME_PATH`); `.docx` needs
   [pandoc](https://pandoc.org) on your `PATH`. **PowerPoint** is special: Claude
@@ -67,6 +72,7 @@ The smoke test needs the `claude` CLI, Google Chrome, and `playwright-core`
 - `server.js` — HTTP server, static hosting, JSON + SSE API
 - `lib/claude.js` — spawns the CLI: streaming generation + find/replace revision
 - `lib/docs.js` — Markdown + metadata persistence
+- `lib/skills.js` — discovers voice/style skills (`~/.claude/skills`, `.claude/skills`)
 - `lib/export.js` — export to HTML/PDF/docx/pptx (marked + Chrome + pandoc + pptxgenjs)
 - `public/` — the single-page app (no build step)
 - `test/` — unit tests (`test/unit/`) + opt-in smoke test (`test/smoke.js`)

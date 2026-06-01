@@ -49,15 +49,46 @@ const settings = {
   effort: localStorage.getItem('de.effort') || '',
   // Web research defaults to on (so links/lookups just work); persisted once toggled.
   web: localStorage.getItem('de.web') !== 'false',
+  skill: localStorage.getItem('de.skill') || '',
 };
+
+// Populate the style picker from the user's available skills.
+async function loadSkills() {
+  const sel = $('#sel-style');
+  let list = [];
+  try {
+    list = await api.json('/api/skills');
+  } catch {
+    return;
+  }
+  for (const s of list) {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name + (s.source === 'project' ? ' (project)' : '');
+    if (s.description) opt.title = s.description;
+    sel.appendChild(opt);
+  }
+  // Restore the saved choice if it still exists.
+  sel.value = settings.skill;
+  if (sel.value !== settings.skill) {
+    settings.skill = '';
+    localStorage.removeItem('de.skill');
+  }
+}
 
 function initPicker() {
   const m = $('#sel-model');
   const e = $('#sel-effort');
   const w = $('#chk-web');
+  const s = $('#sel-style');
   m.value = settings.model;
   e.value = settings.effort;
   w.checked = settings.web;
+  s.addEventListener('change', () => {
+    settings.skill = s.value;
+    if (s.value) localStorage.setItem('de.skill', s.value);
+    else localStorage.removeItem('de.skill');
+  });
   m.addEventListener('change', () => {
     settings.model = m.value;
     localStorage.setItem('de.model', m.value);
@@ -372,7 +403,7 @@ async function adjustLength(target, over) {
     const res = await api.json(`/api/docs/${currentId}/revise`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instruction, model: settings.model, effort: settings.effort, web: false }),
+      body: JSON.stringify({ instruction, model: settings.model, effort: settings.effort, web: false, skill: settings.skill }),
     });
     $('#doc').innerHTML = res.html;
     if (res.history) {
@@ -409,6 +440,7 @@ function startGeneration(id) {
   if (settings.model) qs.set('model', settings.model);
   if (settings.effort) qs.set('effort', settings.effort);
   qs.set('web', String(settings.web));
+  if (settings.skill) qs.set('skill', settings.skill);
   const es = new EventSource(`/api/docs/${id}/generate?${qs}`);
   es.addEventListener('reset', () => {
     // Claude started a new turn (e.g. after web research) — drop interim text.
@@ -591,6 +623,7 @@ $('#revise-btn').addEventListener('click', async () => {
     model: settings.model,
     effort: settings.effort,
     web: settings.web,
+    skill: settings.skill,
   };
   if (!payload.comments.length && !payload.instruction) return;
 
@@ -676,4 +709,5 @@ function escapeHtml(s) {
 
 // boot
 initPicker();
+loadSkills();
 route();

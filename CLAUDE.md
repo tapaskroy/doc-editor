@@ -39,6 +39,7 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
 | `server.js` | Express app: static hosting, JSON API, the SSE generation stream. Thin — delegates to `lib/`. |
 | `lib/claude.js` | The only place that spawns the `claude` CLI. `generate()` (streaming), `revise()` (find/replace edits), `interview()`/`compileBrief()`/`briefToPrompt()` (the intake flow), `toDeck()` (pptx), plus prompt construction and output parsing. |
 | `lib/docs.js` | Disk persistence. One document = `docs/<id>.md` (body) + `docs/<id>.meta.json` (metadata). No database. |
+| `lib/skills.js` | Discovers voice/style "skills" (`~/.claude/skills`, project `.claude/skills`) — `list()` for browsing, `read(id)` for the chosen SKILL.md body. |
 | `lib/export.js` | Export to HTML / PDF / docx / pptx. HTML is pure `marked`; PDF shells out to Chrome; docx to pandoc; pptx is a Claude deck-builder + `pptxgenjs`. |
 | `public/index.html` | Single-page app shell: home (composer + library) and editor views. |
 | `public/app.js` | All client logic: hash routing, streaming render, text-selection comments, revision, the model/effort/web picker, and the conversation panel. |
@@ -89,6 +90,28 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
      Markdown, shows "≈N words · ~M min", and — when a `targetWords` exists and
      actual is off by >15% — offers Expand/Trim, which is just a `revise()` call
      with a length instruction. No special server endpoint.
+
+## Voice / style skills
+
+The Style picker lets the user write in a chosen voice without baking any voice
+into the app. `GET /api/skills` lists skills found in `~/.claude/skills` and the
+project's `.claude/skills` (each a dir with a `SKILL.md` whose frontmatter gives
+name + description). The selected skill id rides along on generate (query) and
+revise (body); the server resolves it via `skills.read(id)` to the SKILL.md body
+(frontmatter stripped) and `claude.styleNote()` appends it to the writing system
+prompt as a "voice & style guide" governing *how* it writes, not *what*.
+
+Notes:
+- Injection (read the file → append to the system prompt) is the right approach
+  here because generation runs headless with `--tools none` and a replaced
+  `--system-prompt`, so native skill invocation isn't in play. (Skill authors
+  even expect this — `tapas-voice`'s frontmatter says it's "designed to be
+  appended verbatim to a writing model's system prompt.")
+- `read(id)` reduces the id to a basename, so a request can't traverse out of the
+  skill roots. Roots are overridable via `DOC_EDITOR_SKILLS_DIR` (used by tests).
+- Style is a global picker (localStorage `de.skill`), like model/effort/web —
+  sent per request, not stored on the doc. Applies to drafting (incl. briefing)
+  and revisions; not to the interview/brief/deck steps.
 
 ## Conversation memory (important design decision)
 

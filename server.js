@@ -115,7 +115,10 @@ app.get('/api/docs/:id/export', async (req, res) => {
   try {
     const { title } = docs.readMeta(id);
     const markdown = docs.getMarkdown(id);
-    const { buffer, contentType, ext } = await exporter.exportDoc(format, markdown, title);
+    const { model, effort } = req.query;
+    // pptx is built by having Claude restructure the doc into a slide deck first.
+    const deckBuilder = (md) => claude.toDeck(md, { model, effort });
+    const { buffer, contentType, ext } = await exporter.exportDoc(format, markdown, title, { deckBuilder });
     const safe = (title || 'document').replace(/[^\w\d ]+/g, '').trim().replace(/\s+/g, ' ') || 'document';
     res.set('Content-Type', contentType);
     res.set('Content-Disposition', `attachment; filename="${safe}.${ext}"`);

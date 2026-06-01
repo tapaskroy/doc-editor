@@ -39,7 +39,7 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
 | `server.js` | Express app: static hosting, JSON API, the SSE generation stream. Thin — delegates to `lib/`. |
 | `lib/claude.js` | The only place that spawns the `claude` CLI. `generate()` (streaming) and `revise()` (find/replace edits), plus prompt construction and output parsing. |
 | `lib/docs.js` | Disk persistence. One document = `docs/<id>.md` (body) + `docs/<id>.meta.json` (metadata). No database. |
-| `lib/export.js` | Export to HTML / PDF / docx / pptx. Shells out to Chrome (pdf) and pandoc (docx/pptx); HTML is pure `marked`. |
+| `lib/export.js` | Export to HTML / PDF / docx / pptx. HTML is pure `marked`; PDF shells out to Chrome; docx to pandoc; pptx is a Claude deck-builder + `pptxgenjs`. |
 | `public/index.html` | Single-page app shell: home (composer + library) and editor views. |
 | `public/app.js` | All client logic: hash routing, streaming render, text-selection comments, revision, the model/effort/web picker, and the conversation panel. |
 | `public/styles.css` | Styling. Document reads in a serif column; UI is sans-serif. |
@@ -110,14 +110,26 @@ Markdown is the source for all four formats:
 - **pdf** — write the styled HTML to a temp file and print it with headless
   system Chrome (`--headless=new … --print-to-pdf`). Matches the on-screen look.
   Chrome is located via `CHROME_PATH` or common macOS install paths.
-- **docx / pptx** — `pandoc` (`-f gfm -t docx|pptx`), fed Markdown on stdin.
-  pptx uses `--slide-level=2` (one slide per H2).
+- **docx** — `pandoc` (`-f gfm -t docx`), fed Markdown on stdin.
+- **pptx** — a document is not a deck, so we don't convert it mechanically.
+  `claude.toDeck()` first restructures the doc into a slide model
+  (`{title, subtitle, slides:[{title, bullets[], notes}]}`), then
+  `export.deckToPptx()` renders it with **`pptxgenjs`** (title slide + bulleted
+  content + speaker notes, 16:9). The deck builder is **injected by the server**
+  (`exportDoc(format, md, title, { deckBuilder })`) so `lib/export.js` has no
+  direct dependency on the CLI and the pptx renderer stays unit-testable with a
+  stub deck. This is the one export that calls Claude (and respects the
+  model/effort picker), so it's slower than the others.
 
-Engines are external tools, not npm deps — consistent with how the app shells out
-to `claude`. A missing engine throws a clear "install X" error; the route maps an
-unknown format to **400** and a missing/failed engine to **501**, so the other
-formats keep working. The client downloads via `fetch` → Blob → `<a download>`,
-surfacing any 4xx/5xx message as a toast.
+docx/pdf engines are external tools, not npm deps — consistent with how the app
+shells out to `claude`. A missing engine throws a clear "install X" error; the
+route maps an unknown format to **400** and a missing/failed engine to **501**,
+so the other formats keep working. The client downloads via `fetch` → Blob →
+`<a download>`, surfacing any 4xx/5xx message as a toast.
+
+Note: `file(1)` labels pptxgenjs output as generic "Zip archive data" (its JSZip
+zipper doesn't store `[Content_Types].xml` first) — that's cosmetic, not
+corruption; the file is valid OOXML and opens in PowerPoint/Keynote/Slides.
 
 Gotcha worth remembering: **don't pass `--user-data-dir` to headless Chrome** for
 print-to-pdf — on recent Chrome it triggers a first-run flow that hangs. The
@@ -176,3 +188,10 @@ never touch the real `docs/`.
 Inline hand-editing of the rendered doc, per-comment "apply individually", and
 true document-level undo (would require snapshotting the Markdown per revision —
 pruning history today does **not** roll back the doc).
+
+A richer **presentation** path: let the user bring their own slide skills /
+templates, formatting conventions, and images so pptx export produces a polished,
+on-brand deck rather than the current generic theme. The deck-builder
+(`claude.toDeck`) and renderer (`export.deckToPptx`) are the seams to extend —
+e.g. feed a user template/theme into the renderer and image guidance into the
+deck model.

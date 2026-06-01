@@ -285,7 +285,10 @@ async function exportDoc(format, btn) {
   btn.disabled = true;
   setStatus('● exporting ' + format);
   try {
-    const r = await fetch(`/api/docs/${currentId}/export?format=${format}`);
+    const qs = new URLSearchParams({ format });
+    if (settings.model) qs.set('model', settings.model);
+    if (settings.effort) qs.set('effort', settings.effort);
+    const r = await fetch(`/api/docs/${currentId}/export?${qs}`);
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       throw new Error(j.error || r.statusText);

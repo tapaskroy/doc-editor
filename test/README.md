@@ -11,7 +11,7 @@ logic:
 - `unit/extract-edits.test.js` — tolerant JSON parsing (fences, stray prose, in-string braces)
 - `unit/flags.test.js` — model/effort whitelisting, web-tool flag building, request formatting
 - `unit/docs.test.js` — persistence, title derivation, history add/prune (run against a temp dir)
-- `unit/export.test.js` — standalone HTML generation + the format registry (the pandoc/Chrome paths are exercised by the smoke test, not here)
+- `unit/export.test.js` — standalone HTML generation, the format registry, and the `pptxgenjs` deck renderer (`deckToPptx`) with a stub deck. The pandoc/Chrome paths and the Claude deck-builder are exercised by the smoke test, not here.
 
 These run in well under a second and are safe to run anywhere.
 

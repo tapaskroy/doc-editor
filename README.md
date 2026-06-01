@@ -32,6 +32,12 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
 - **Web research** (🌐 toggle, on by default): Claude may use `WebSearch`/
   `WebFetch` to read linked URLs and look things up. Filesystem/shell tools are
   never exposed.
+- **Attachments** (📎): upload pictures and reference documents (images, PDF,
+  text/Markdown, Word) to a document. Claude reads them as input — images via its
+  Read tool, Word/etc. converted to text via pandoc — and uses its own judgment
+  about whether to **embed a picture** in the output (you can also just ask).
+  Embedded images render in-app and are baked into HTML/PDF/Word exports.
+  (PowerPoint stays text-only for now.)
 - **Voice / style** (Style picker): write in a chosen *skill*. The app lists the
   skills in `~/.claude/skills` and the project's `.claude/skills` (each a folder
   with a `SKILL.md`); pick one and its guide is appended to the writing prompt so
@@ -73,6 +79,7 @@ The smoke test needs the `claude` CLI, Google Chrome, and `playwright-core`
 - `lib/claude.js` — spawns the CLI: streaming generation + find/replace revision
 - `lib/docs.js` — Markdown + metadata persistence
 - `lib/skills.js` — discovers voice/style skills (`~/.claude/skills`, `.claude/skills`)
+- `lib/attachments.js` — uploaded reference files under `docs-assets/` (+ pandoc text conversion)
 - `lib/export.js` — export to HTML/PDF/docx/pptx (marked + Chrome + pandoc + pptxgenjs)
 - `public/` — the single-page app (no build step)
 - `test/` — unit tests (`test/unit/`) + opt-in smoke test (`test/smoke.js`)

@@ -18,13 +18,21 @@ test('modelEffortArgs drops unknown / empty values', () => {
 });
 
 test('toolArgs exposes only web tools (and pre-approves them) when enabled', () => {
-  assert.deepEqual(toolArgs(true), [
+  assert.deepEqual(toolArgs({ web: true }), [
     '--tools', 'WebFetch', 'WebSearch', '--allowedTools', 'WebFetch', 'WebSearch',
   ]);
 });
 
-test('toolArgs disables all tools when web is off', () => {
-  assert.deepEqual(toolArgs(false), ['--tools', 'none']);
+test('toolArgs adds Read for attachments, and combines with web', () => {
+  assert.deepEqual(toolArgs({ read: true }), ['--tools', 'Read', '--allowedTools', 'Read']);
+  assert.deepEqual(toolArgs({ web: true, read: true }), [
+    '--tools', 'Read', 'WebFetch', 'WebSearch', '--allowedTools', 'Read', 'WebFetch', 'WebSearch',
+  ]);
+});
+
+test('toolArgs disables all tools when nothing is needed', () => {
+  assert.deepEqual(toolArgs({}), ['--tools', 'none']);
+  assert.deepEqual(toolArgs(), ['--tools', 'none']);
 });
 
 test('formatRequest renders comments and a global instruction', () => {

@@ -162,13 +162,91 @@ $('#create-btn').addEventListener('click', async () => {
       body: JSON.stringify({ premise }),
     });
     $('#premise').value = '';
+    if (pendingAttachments.length) {
+      $('#create-btn').textContent = 'Uploading…';
+      await uploadPending(meta.id);
+    }
     location.hash = `#/doc/${meta.id}`;
   } catch (e) {
     toast('Could not create document: ' + e.message);
   } finally {
     $('#create-btn').disabled = false;
+    $('#create-btn').textContent = 'Draft it →';
   }
 });
+
+// ---- attachments --------------------------------------------------------
+
+const ATT_ICON = { image: '🖼', pdf: '📄', text: '📝', doc: '📃', other: '📎' };
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(new Error('could not read ' + file.name));
+    r.readAsDataURL(file);
+  });
+}
+
+async function uploadAttachment(docId, file) {
+  const dataBase64 = await fileToBase64(file);
+  return api.json(`/api/docs/${docId}/attachments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: file.name, type: file.type, dataBase64 }),
+  });
+}
+
+// Home composer: pictures/documents chosen before drafting (held until a doc
+// exists, then uploaded to it).
+let pendingAttachments = [];
+
+function renderChips() {
+  const ul = $('#attach-chips');
+  ul.innerHTML = '';
+  pendingAttachments.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.textContent = `${ATT_ICON[guessKind(f)] || '📎'} ${f.name}`;
+    const x = document.createElement('button');
+    x.className = 'x';
+    x.textContent = '✕';
+    x.addEventListener('click', () => {
+      pendingAttachments.splice(i, 1);
+      renderChips();
+    });
+    li.appendChild(x);
+    ul.appendChild(li);
+  });
+}
+
+function guessKind(file) {
+  const t = file.type || '';
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (t.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image';
+  if (t === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (t.startsWith('text/') || ['md', 'txt', 'csv'].includes(ext)) return 'text';
+  return 'doc';
+}
+
+$('#attach-btn').addEventListener('click', () => $('#attach-input').click());
+$('#attach-input').addEventListener('change', (e) => {
+  pendingAttachments.push(...e.target.files);
+  e.target.value = '';
+  renderChips();
+});
+
+// Upload all pending home attachments to a freshly-created doc.
+async function uploadPending(docId) {
+  for (const f of pendingAttachments) {
+    try {
+      await uploadAttachment(docId, f);
+    } catch (e) {
+      toast('Upload failed for ' + f.name + ': ' + e.message);
+    }
+  }
+  pendingAttachments = [];
+  renderChips();
+}
 
 // "Let's talk about it first" — stash the starting idea, open the intake chat.
 let briefPremise = '';
@@ -277,6 +355,10 @@ $('#brief-draft').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ premise, intake: intakeMessages, model: settings.model, effort: settings.effort }),
     });
+    if (pendingAttachments.length) {
+      btn.textContent = 'Uploading attachments…';
+      await uploadPending(meta.id);
+    }
     location.hash = `#/doc/${meta.id}`;
   } catch (e) {
     toast('Could not start drafting: ' + e.message);
@@ -289,6 +371,54 @@ $('#brief-draft').addEventListener('click', async () => {
 
 let currentId = null;
 let currentBrief = null; // the doc's compiled brief, if it came from intake
+let currentAttachments = []; // [{ id, name, kind, url, storedName }]
+
+function renderAttachments() {
+  $('#att-count').textContent = currentAttachments.length;
+  const ul = $('#att-list');
+  ul.innerHTML = '';
+  for (const a of currentAttachments) {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<span>${ATT_ICON[a.kind] || '📎'}</span>` +
+      `<span class="nm" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>` +
+      `<span class="kind">${a.kind}</span>`;
+    const x = document.createElement('button');
+    x.className = 'x';
+    x.textContent = '✕';
+    x.title = 'Remove attachment';
+    x.addEventListener('click', async () => {
+      try {
+        const res = await api.json(`/api/docs/${currentId}/attachments/${encodeURIComponent(a.storedName)}`, { method: 'DELETE' });
+        currentAttachments = res.attachments || [];
+        renderAttachments();
+      } catch (e) {
+        toast('Could not remove: ' + e.message);
+      }
+    });
+    li.appendChild(x);
+    ul.appendChild(li);
+  }
+}
+
+$('#att-add').addEventListener('click', () => $('#att-input').click());
+$('#att-input').addEventListener('change', async (e) => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (!currentId || !files.length) return;
+  setStatus('● uploading');
+  try {
+    for (const f of files) {
+      const att = await uploadAttachment(currentId, f);
+      currentAttachments.push(att);
+    }
+    renderAttachments();
+  } catch (e2) {
+    toast('Upload failed: ' + e2.message);
+  } finally {
+    setStatus('');
+  }
+});
 let comments = []; // { id, quote, note, range }
 let commentSeq = 0;
 let history = []; // [{ role, content }] — the conversation memory for this doc
@@ -349,7 +479,9 @@ async function showEditor(id) {
   $('#doc-title').textContent = data.title || 'Untitled';
   history = data.history || [];
   currentBrief = data.brief || null;
+  currentAttachments = data.attachments || [];
   renderHistory();
+  renderAttachments();
 
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.

@@ -14,6 +14,8 @@ logic:
 - `unit/export.test.js` — standalone HTML generation, the format registry, and the `pptxgenjs` deck renderer (`deckToPptx`) with a stub deck. The pandoc/Chrome paths and the Claude deck-builder are exercised by the smoke test, not here.
 - `unit/brief.test.js` — `briefToPrompt` (intake brief → generation constraints). The interviewer and brief-compiler CLI calls are exercised by the smoke test.
 - `unit/skills.test.js` — skill discovery/read against a fixture dir (`DOC_EDITOR_SKILLS_DIR`), path-traversal safety, and `styleNote` wrapping.
+- `unit/attachments.test.js` — attachment classify/store/remove and the prompt `referenceBlock` (fixture dir via `DOC_EDITOR_ASSETS_DIR`).
+- `unit/export-media.test.js` — `buildHtml` inlining `/media` images as data URIs for portable HTML/PDF.
 
 These run in well under a second and are safe to run anywhere.
 

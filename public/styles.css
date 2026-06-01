@@ -161,6 +161,23 @@ button {
 .length-target .mini { background: var(--accent-soft); color: var(--accent); border: none; }
 .length-target .mini:hover { background: #e9d3c7; }
 
+/* Attachment chips (home) + list (editor) */
+.chips { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.chips li {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 20px;
+  padding: 5px 6px 5px 12px; font-size: 13px; color: var(--ink); box-shadow: var(--shadow);
+}
+.chips .x, .att-list .x { background: none; border: none; color: var(--muted); font-size: 13px; padding: 2px 6px; line-height: 1; }
+.chips .x:hover, .att-list .x:hover { color: var(--accent); }
+.att-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.att-list li {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 12.5px; background: #fffdfa;
+}
+.att-list .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-list .kind { color: var(--muted); font-size: 11px; }
+
 /* Library */
 .library { margin-top: 54px; }
 .library h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }

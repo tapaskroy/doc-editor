@@ -40,6 +40,7 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
 | `lib/claude.js` | The only place that spawns the `claude` CLI. `generate()` (streaming), `revise()` (find/replace edits), `interview()`/`compileBrief()`/`briefToPrompt()` (the intake flow), `toDeck()` (pptx), plus prompt construction and output parsing. |
 | `lib/docs.js` | Disk persistence. One document = `docs/<id>.md` (body) + `docs/<id>.meta.json` (metadata). No database. |
 | `lib/skills.js` | Discovers voice/style "skills" (`~/.claude/skills`, project `.claude/skills`) — `list()` for browsing, `read(id)` for the chosen SKILL.md body. |
+| `lib/attachments.js` | Per-doc uploaded reference files under `docs-assets/<docId>/`. Stores bytes, converts office docs to Markdown (pandoc), builds the prompt reference block. |
 | `lib/export.js` | Export to HTML / PDF / docx / pptx. HTML is pure `marked`; PDF shells out to Chrome; docx to pandoc; pptx is a Claude deck-builder + `pptxgenjs`. |
 | `public/index.html` | Single-page app shell: home (composer + library) and editor views. |
 | `public/app.js` | All client logic: hash routing, streaming render, text-selection comments, revision, the model/effort/web picker, and the conversation panel. |
@@ -90,6 +91,32 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
      Markdown, shows "≈N words · ~M min", and — when a `targetWords` exists and
      actual is off by >15% — offers Expand/Trim, which is just a `revise()` call
      with a length instruction. No special server endpoint.
+
+## Attachments (reference pictures / documents)
+
+The user attaches files to a doc (📎 on the home composer, or the editor's
+Attachments panel); they are **input/reference for Claude**, which decides on its
+own whether a picture belongs in the output.
+
+- Upload is base64 JSON (`POST /api/docs/:id/attachments`); bytes live under
+  `docs-assets/<docId>/` (gitignored). `lib/attachments.js` classifies each file
+  (image / pdf / text / doc) and, for office docs, writes a Markdown sidecar via
+  pandoc so it's readable as text. Each attachment gets a `url`
+  (`/media/<docId>/<name>`, served by the app) and a `refPath` (absolute path
+  Claude reads — never sent to the browser).
+- At generate/revise, `attachments.referenceBlock()` lists each file (its
+  `refPath`, and for images the exact `![](url)` to use if embedding) and is
+  prepended to the prompt; `ATTACH_NOTE` is appended to the system prompt telling
+  Claude to read them and use judgment. The **Read tool is enabled+pre-approved**
+  (`toolArgs({read:true})`) so headless Claude can actually view images / read
+  files. Verified: it genuinely sees image content.
+- Embedded images (`![](/media/...)`) flow into exports: `export.inlineMedia()`
+  turns them into data-URIs for HTML/PDF; `export.localizeMedia()` rewrites them
+  to absolute paths so pandoc embeds them in docx. **pptx is text-only** (the
+  deck-builder summarizes prose) — images-on-slides is a follow-up.
+- Why Read-tool injection over multimodal stream-json input: it reuses Claude
+  Code's native file/image reading, works with our spawn model, and handles
+  images + PDFs + text uniformly. Office formats go through pandoc first.
 
 ## Voice / style skills
 

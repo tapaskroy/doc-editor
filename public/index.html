@@ -48,7 +48,10 @@
         <div class="composer-actions">
           <button id="create-btn" class="primary">Draft it →</button>
           <button id="talk-btn" class="ghost">Let's talk about it first →</button>
+          <button id="attach-btn" class="ghost" title="Attach pictures or documents for Claude to use as reference">📎 Attach</button>
+          <input id="attach-input" type="file" multiple hidden />
         </div>
+        <ul id="attach-chips" class="chips"></ul>
         <p class="sub small">“Draft it” writes immediately. “Let's talk” has Claude interview you about goal, audience, length and tone first, for a more targeted draft.</p>
       </section>
 
@@ -98,6 +101,16 @@
               <p class="hint">What Claude remembers as context. Removing an item only affects future edits — it won't change the document.</p>
               <ol id="history" class="history"></ol>
             </div>
+          </div>
+
+          <div class="panel">
+            <h3>
+              Attachments <span id="att-count" class="count">0</span>
+              <button id="att-add" class="mini">add</button>
+            </h3>
+            <input id="att-input" type="file" multiple hidden />
+            <p class="hint">Pictures or documents Claude uses as reference. Claude decides whether an image belongs in the doc.</p>
+            <ul id="att-list" class="att-list"></ul>
           </div>
 
           <div class="panel">

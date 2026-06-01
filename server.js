@@ -35,9 +35,36 @@ app.get('/api/docs', (req, res) => {
   res.json(docs.list());
 });
 
-app.post('/api/docs', (req, res) => {
-  const meta = docs.create((req.body && req.body.premise) || '');
+app.post('/api/docs', async (req, res) => {
+  const { premise = '', intake, model, effort } = req.body || {};
+  let meta = docs.create(premise);
+  // If this doc came from a "talk about it first" session, compile the planning
+  // conversation into a structured brief that drives a more targeted draft.
+  if (Array.isArray(intake) && intake.length) {
+    try {
+      const brief = await claude.compileBrief(intake, { model, effort });
+      meta = docs.setBrief(meta.id, brief);
+    } catch (err) {
+      // Non-fatal: fall back to a plain premise-driven draft.
+      console.error('brief compilation failed:', err.message);
+    }
+  }
   res.json(meta);
+});
+
+// One interviewer turn for the "talk about it first" intake (stateless;
+// the client holds the running transcript).
+app.post('/api/intake', async (req, res) => {
+  const { messages = [], model, effort } = req.body || {};
+  if (!Array.isArray(messages) || !messages.length) {
+    return res.status(400).json({ error: 'no messages provided' });
+  }
+  try {
+    const reply = await claude.interview(messages, { model, effort });
+    res.json({ reply });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/docs/:id', (req, res) => {
@@ -63,9 +90,11 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
 app.get('/api/docs/:id/generate', (req, res) => {
   const { id } = req.params;
   if (!docs.exists(id)) return res.status(404).end();
-  const { premise } = docs.readMeta(id);
+  const { premise, brief } = docs.readMeta(id);
   const { model, effort } = req.query;
   const web = req.query.web === 'true';
+  // A briefed doc generates from its structured brief; otherwise from the premise.
+  const genPrompt = brief ? claude.briefToPrompt(brief) : premise;
   // Start the conversation fresh for this (re)generation; the premise is turn 1.
   docs.setHistory(id, [{ role: 'user', content: premise }]);
 
@@ -78,7 +107,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
 
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
-  const child = claude.generate(premise, {
+  const child = claude.generate(genPrompt, {
     model,
     effort,
     web,

@@ -74,6 +74,25 @@ async function waitForServer(timeoutMs = 15000) {
     await page.waitForSelector('text=What do you want to write?');
     log('home rendered');
 
+    // 2b) "Let's talk about it first" intake: interviewer asks, user answers.
+    await page.fill('#premise', 'A short explainer about why sleep matters.');
+    await page.click('#talk-btn');
+    await page.waitForFunction(() => location.hash === '#/brief', null, { timeout: 5000 });
+    await page.waitForFunction(
+      () => document.querySelectorAll('#brief-thread .msg.assistant:not(.thinking)').length >= 1,
+      null,
+      { timeout: 90000 }
+    );
+    await page.fill('#brief-input', 'Busy parents, ~200 words, warm and practical.');
+    await page.click('#brief-send');
+    await page.waitForFunction(
+      () => document.querySelectorAll('#brief-thread .msg.assistant:not(.thinking)').length >= 2,
+      null,
+      { timeout: 90000 }
+    );
+    log('intake interview: interviewer asked and responded');
+    await page.goto(BASE, { waitUntil: 'networkidle' }); // back home for the draft-path check
+
     // 3) Create + stream a draft.
     await page.fill('#premise', 'Write one short paragraph titled "Beacons" about lighthouses.');
     await page.click('#create-btn');

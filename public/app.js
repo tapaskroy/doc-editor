@@ -78,12 +78,14 @@ function route() {
   const hash = location.hash || '#/';
   const m = hash.match(/^#\/doc\/(.+)$/);
   if (m) showEditor(m[1]);
+  else if (hash === '#/brief') showBrief();
   else showHome();
 }
 window.addEventListener('hashchange', route);
 
 function show(view) {
   $('#view-home').classList.toggle('hidden', view !== 'home');
+  $('#view-brief').classList.toggle('hidden', view !== 'brief');
   $('#view-editor').classList.toggle('hidden', view !== 'editor');
 }
 
@@ -137,9 +139,125 @@ $('#create-btn').addEventListener('click', async () => {
   }
 });
 
+// "Let's talk about it first" — stash the starting idea, open the intake chat.
+let briefPremise = '';
+$('#talk-btn').addEventListener('click', () => {
+  const premise = $('#premise').value.trim();
+  if (!premise) {
+    $('#premise').focus();
+    return;
+  }
+  briefPremise = premise;
+  $('#premise').value = '';
+  location.hash = '#/brief';
+});
+
+// ---- briefing (intake interview) ---------------------------------------
+
+let intakeMessages = []; // [{ role: 'user' | 'assistant', content }]
+
+function renderThread() {
+  const t = $('#brief-thread');
+  t.innerHTML = '';
+  for (const m of intakeMessages) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + m.role;
+    div.textContent = m.content;
+    t.appendChild(div);
+  }
+  t.scrollTop = t.scrollHeight;
+}
+
+function showThinking(on) {
+  const existing = $('#brief-thread .thinking');
+  if (on && !existing) {
+    const div = document.createElement('div');
+    div.className = 'msg assistant thinking';
+    div.textContent = 'Claude is thinking…';
+    $('#brief-thread').appendChild(div);
+    $('#brief-thread').scrollTop = $('#brief-thread').scrollHeight;
+  } else if (!on && existing) {
+    existing.remove();
+  }
+}
+
+async function intakeTurn() {
+  showThinking(true);
+  $('#brief-send').disabled = true;
+  try {
+    const { reply } = await api.json('/api/intake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: intakeMessages, model: settings.model, effort: settings.effort }),
+    });
+    intakeMessages.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    intakeMessages.push({ role: 'assistant', content: '(Sorry — I hit an error: ' + e.message + '. You can still hit “Draft it now”.)' });
+  } finally {
+    showThinking(false);
+    $('#brief-send').disabled = false;
+    renderThread();
+  }
+}
+
+async function showBrief() {
+  show('brief');
+  $('#doc-title').textContent = '';
+  setStatus('');
+  if (!briefPremise) {
+    // No starting idea (e.g. reloaded straight onto #/brief) — send them home.
+    location.hash = '#/';
+    return;
+  }
+  intakeMessages = [{ role: 'user', content: briefPremise }];
+  briefPremise = ''; // consumed
+  renderThread();
+  $('#brief-input').focus();
+  await intakeTurn(); // Claude asks its first questions
+}
+
+$('#brief-send').addEventListener('click', sendBriefMessage);
+$('#brief-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    sendBriefMessage();
+  }
+});
+
+async function sendBriefMessage() {
+  const text = $('#brief-input').value.trim();
+  if (!text) return;
+  intakeMessages.push({ role: 'user', content: text });
+  $('#brief-input').value = '';
+  renderThread();
+  await intakeTurn();
+}
+
+$('#brief-draft').addEventListener('click', async () => {
+  if (!intakeMessages.length) return;
+  const btn = $('#brief-draft');
+  btn.disabled = true;
+  btn.textContent = 'Preparing the brief…';
+  try {
+    // The original idea is the first user message; send the whole transcript.
+    const premise = intakeMessages[0].content;
+    const meta = await api.json('/api/docs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ premise, intake: intakeMessages, model: settings.model, effort: settings.effort }),
+    });
+    location.hash = `#/doc/${meta.id}`;
+  } catch (e) {
+    toast('Could not start drafting: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Draft it now →';
+  }
+});
+
 // ---- editor -------------------------------------------------------------
 
 let currentId = null;
+let currentBrief = null; // the doc's compiled brief, if it came from intake
 let comments = []; // { id, quote, note, range }
 let commentSeq = 0;
 let history = []; // [{ role, content }] — the conversation memory for this doc
@@ -199,13 +317,75 @@ async function showEditor(id) {
   }
   $('#doc-title').textContent = data.title || 'Untitled';
   history = data.history || [];
+  currentBrief = data.brief || null;
   renderHistory();
 
   if (!data.markdown.trim()) {
-    // Freshly created — stream the first draft from its premise.
+    // Freshly created — stream the first draft from its premise/brief.
+    $('#length-panel').classList.add('hidden');
     startGeneration(id);
   } else {
     doc.innerHTML = data.html;
+    updateLength(data.markdown);
+  }
+}
+
+// ---- length readout + target adjustment --------------------------------
+
+function countWords(md) {
+  return (String(md).match(/[A-Za-z0-9’'\-]+/g) || []).length;
+}
+
+function updateLength(markdown) {
+  const words = countWords(markdown);
+  const minutes = Math.max(1, Math.round(words / 225));
+  const panel = $('#length-panel');
+  panel.classList.remove('hidden');
+  $('#length-readout').textContent = `≈ ${words.toLocaleString()} words · ~${minutes} min read`;
+
+  const target = currentBrief && currentBrief.targetWords;
+  const targetEl = $('#length-target');
+  if (!target) {
+    targetEl.classList.add('hidden');
+    return;
+  }
+  const off = Math.abs(words - target) / target;
+  if (off <= 0.15) {
+    targetEl.classList.add('hidden');
+    return;
+  }
+  targetEl.classList.remove('hidden');
+  const over = words > target;
+  $('#length-target-text').textContent = `Target ~${target.toLocaleString()} words — ${over ? 'a bit long' : 'a bit short'}`;
+  const btn = $('#length-adjust');
+  btn.textContent = over ? 'Trim' : 'Expand';
+  btn.onclick = () => adjustLength(target, over);
+}
+
+async function adjustLength(target, over) {
+  const instruction = over
+    ? `Tighten the document to approximately ${target} words. Cut redundancy, padding, and tangents; preserve every key point, the structure, and the tone.`
+    : `Expand the document to approximately ${target} words. Add genuine depth, examples, and detail where it strengthens the piece — do not pad. Keep the structure, tone, and all existing points.`;
+  $('#length-adjust').disabled = true;
+  setStatus('● adjusting length');
+  try {
+    const res = await api.json(`/api/docs/${currentId}/revise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction, model: settings.model, effort: settings.effort, web: false }),
+    });
+    $('#doc').innerHTML = res.html;
+    if (res.history) {
+      history = res.history;
+      renderHistory();
+    }
+    updateLength(res.markdown);
+    toast('Adjusted length.');
+  } catch (e) {
+    toast('Could not adjust: ' + e.message);
+  } finally {
+    $('#length-adjust').disabled = false;
+    setStatus('');
   }
 }
 
@@ -252,6 +432,7 @@ function startGeneration(id) {
       history = d.history;
       renderHistory();
     }
+    updateLength(d.markdown);
     setStatus('');
     $('#revise-btn').disabled = comments.length === 0 && !$('#instruction').value.trim();
     es.close();
@@ -437,6 +618,7 @@ $('#revise-btn').addEventListener('click', async () => {
       history = res.history;
       renderHistory();
     }
+    updateLength(res.markdown);
 
     const ok = res.applied.filter((a) => a.ok).length;
     const failed = res.applied.filter((a) => !a.ok);

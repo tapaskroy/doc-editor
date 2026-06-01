@@ -42,12 +42,33 @@
         <h1>What do you want to write?</h1>
         <p class="sub">Describe the document. Claude drafts it; then you select text and comment to refine.</p>
         <textarea id="premise" placeholder="e.g. A one-page product brief for a tide-pool field guide app, friendly but precise…"></textarea>
-        <button id="create-btn" class="primary">Draft it →</button>
+        <div class="composer-actions">
+          <button id="create-btn" class="primary">Draft it →</button>
+          <button id="talk-btn" class="ghost">Let's talk about it first →</button>
+        </div>
+        <p class="sub small">“Draft it” writes immediately. “Let's talk” has Claude interview you about goal, audience, length and tone first, for a more targeted draft.</p>
       </section>
 
       <section class="library">
         <h2>Your documents</h2>
         <ul id="doc-list" class="doc-list"></ul>
+      </section>
+    </main>
+
+    <!-- BRIEFING VIEW (the "let's talk about it first" intake) -->
+    <main id="view-brief" class="view hidden">
+      <section class="brief">
+        <h1>Let's plan it first</h1>
+        <p class="sub">Claude will ask a few questions to target the document. Answer as much or as little as you like, then hit <strong>Draft it now</strong> whenever you're ready.</p>
+        <div id="brief-thread" class="thread"></div>
+        <div class="brief-compose">
+          <textarea id="brief-input" placeholder="Type your answer…" rows="2"></textarea>
+          <button id="brief-send" class="primary">Send</button>
+        </div>
+        <div class="brief-actions">
+          <button id="brief-draft" class="primary">Draft it now →</button>
+          <a class="brief-cancel" href="#/">Cancel</a>
+        </div>
       </section>
     </main>
 
@@ -57,6 +78,14 @@
         <article id="doc" class="doc"></article>
 
         <aside class="sidebar">
+          <div id="length-panel" class="panel length-panel hidden">
+            <div class="length-stat"><span id="length-readout">—</span></div>
+            <div id="length-target" class="length-target hidden">
+              <span id="length-target-text"></span>
+              <button id="length-adjust" class="mini"></button>
+            </div>
+          </div>
+
           <div class="panel">
             <h3>
               Conversation <span id="hist-count" class="count">0</span>

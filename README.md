@@ -15,7 +15,13 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
 
 - Documents are stored as Markdown in `docs/` (the source of truth) and rendered
   to HTML for display.
-- **Generate**: streams a fresh draft token-by-token via Server-Sent Events.
+- **Generate** two ways:
+  - **Draft it** — streams a fresh draft from your premise, token-by-token (SSE).
+  - **Let's talk about it first** — Claude interviews you (goal, audience, length,
+    reading time, tone, key points), compiles the conversation into a structured
+    brief, then drafts a far more *targeted* document against it. After drafting,
+    the editor shows the word count / reading time and offers one-click expand or
+    trim if it's off your target length.
 - **Revise**: sends the doc + your selected passages and notes to Claude, which
   returns minimal find/replace edits that the server splices in.
 - **Conversation memory**: each document keeps an ordered history of your

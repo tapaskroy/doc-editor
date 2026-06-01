@@ -37,7 +37,7 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
 | Path | Responsibility |
 |------|----------------|
 | `server.js` | Express app: static hosting, JSON API, the SSE generation stream. Thin — delegates to `lib/`. |
-| `lib/claude.js` | The only place that spawns the `claude` CLI. `generate()` (streaming) and `revise()` (find/replace edits), plus prompt construction and output parsing. |
+| `lib/claude.js` | The only place that spawns the `claude` CLI. `generate()` (streaming), `revise()` (find/replace edits), `interview()`/`compileBrief()`/`briefToPrompt()` (the intake flow), `toDeck()` (pptx), plus prompt construction and output parsing. |
 | `lib/docs.js` | Disk persistence. One document = `docs/<id>.md` (body) + `docs/<id>.meta.json` (metadata). No database. |
 | `lib/export.js` | Export to HTML / PDF / docx / pptx. HTML is pure `marked`; PDF shells out to Chrome; docx to pandoc; pptx is a Claude deck-builder + `pptxgenjs`. |
 | `public/index.html` | Single-page app shell: home (composer + library) and editor views. |
@@ -64,6 +64,31 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
   not a full rewrite).
 - `find` strings are matched verbatim; ambiguous/missing matches are reported in
   the `applied[]` array rather than silently dropped.
+
+## Two generation paths
+
+- **Draft it** (fast path): `POST /api/docs {premise}` → editor auto-streams from
+  the premise. Unchanged original behavior.
+- **Let's talk about it first** (`#/brief` view): an adaptive interview that
+  produces a *targeted* draft.
+  1. `POST /api/intake {messages}` runs one interviewer turn (`claude.interview`,
+     prose, stateless — the client holds the transcript). The interviewer probes
+     goal/audience/length/reading-time/tone/key-points, 1–2 questions at a time,
+     and is told **not** to write the doc and to offer to draft once it has the
+     essentials. "Draft it now" is always available too.
+  2. "Draft it now" → `POST /api/docs {premise, intake}`. The server calls
+     `claude.compileBrief(intake)` → a structured brief
+     (`{title, summary, audience, purpose, tone, targetWords, keyPoints, structure}`),
+     stored on the doc; the brief's `summary` becomes the premise (so history /
+     the conversation panel reflect it). `targetWords` is derived from any
+     length/reading-time the user gave (~500 words/page, ~225 wpm).
+  3. Generation: if the doc has a `brief`, the route generates from
+     `claude.briefToPrompt(brief)` (explicit constraints) instead of the bare
+     premise.
+  4. Length check is **client-side**: `updateLength()` counts words from the
+     Markdown, shows "≈N words · ~M min", and — when a `targetWords` exists and
+     actual is off by >15% — offers Expand/Trim, which is just a `revise()` call
+     with a length instruction. No special server endpoint.
 
 ## Conversation memory (important design decision)
 

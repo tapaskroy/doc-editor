@@ -120,6 +120,47 @@ button {
 }
 #premise:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 
+.composer-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.sub.small { font-size: 13px; margin-top: 14px; }
+
+/* Briefing (intake chat) */
+.brief { max-width: 760px; }
+.brief h1 { font-size: 28px; letter-spacing: -0.02em; margin: 0 0 6px; }
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 24px 0 16px;
+  min-height: 120px;
+}
+.msg { max-width: 80%; padding: 11px 15px; border-radius: 14px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+.msg.assistant { align-self: flex-start; background: var(--paper); border: 1px solid var(--line); border-bottom-left-radius: 4px; box-shadow: var(--shadow); }
+.msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.msg.thinking { color: var(--muted); font-style: italic; }
+.brief-compose { display: flex; gap: 10px; align-items: flex-end; }
+#brief-input {
+  flex: 1;
+  resize: vertical;
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+#brief-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.brief-actions { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.brief-cancel { color: var(--muted); font-size: 14px; text-decoration: none; }
+.brief-cancel:hover { color: var(--accent); }
+
+/* Length panel (editor) */
+.length-panel { display: flex; flex-direction: column; gap: 8px; }
+.length-stat { font-size: 14px; color: var(--ink); font-weight: 540; }
+.length-target { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.length-target .mini { background: var(--accent-soft); color: var(--accent); border: none; }
+.length-target .mini:hover { background: #e9d3c7; }
+
 /* Library */
 .library { margin-top: 54px; }
 .library h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }

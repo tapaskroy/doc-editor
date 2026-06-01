@@ -26,6 +26,10 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
 - **Web research** (🌐 toggle, on by default): Claude may use `WebSearch`/
   `WebFetch` to read linked URLs and look things up. Filesystem/shell tools are
   never exposed.
+- **Export** to HTML, PDF, Word (`.docx`), or PowerPoint (`.pptx`). HTML works
+  out of the box; PDF needs Google Chrome (or `CHROME_PATH`); `.docx`/`.pptx`
+  need [pandoc](https://pandoc.org) on your `PATH`. Missing an engine just shows
+  a helpful message — the other formats keep working.
 - Uses the `claude` CLI in headless mode (`-p`) with a custom writing system
   prompt — no API key required.
 
@@ -54,6 +58,7 @@ The smoke test needs the `claude` CLI, Google Chrome, and `playwright-core`
 - `server.js` — HTTP server, static hosting, JSON + SSE API
 - `lib/claude.js` — spawns the CLI: streaming generation + find/replace revision
 - `lib/docs.js` — Markdown + metadata persistence
+- `lib/export.js` — export to HTML/PDF/docx/pptx (marked + Chrome + pandoc)
 - `public/` — the single-page app (no build step)
 - `test/` — unit tests (`test/unit/`) + opt-in smoke test (`test/smoke.js`)
 

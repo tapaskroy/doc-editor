@@ -8,6 +8,7 @@ const { marked } = require('marked');
 
 const docs = require('./lib/docs');
 const claude = require('./lib/claude');
+const exporter = require('./lib/export');
 
 const PORT = process.env.PORT || 9999;
 const app = express();
@@ -99,6 +100,30 @@ app.get('/api/docs/:id/generate', (req, res) => {
       child.kill();
     } catch {}
   });
+});
+
+// --- Export (html / pdf / docx / pptx) -----------------------------------
+
+app.get('/api/docs/:id/export', async (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const format = String(req.query.format || 'html');
+  if (!exporter.FORMATS[format]) {
+    return res.status(400).json({ error: `unsupported format: ${format}` });
+  }
+
+  try {
+    const { title } = docs.readMeta(id);
+    const markdown = docs.getMarkdown(id);
+    const { buffer, contentType, ext } = await exporter.exportDoc(format, markdown, title);
+    const safe = (title || 'document').replace(/[^\w\d ]+/g, '').trim().replace(/\s+/g, ' ') || 'document';
+    res.set('Content-Type', contentType);
+    res.set('Content-Disposition', `attachment; filename="${safe}.${ext}"`);
+    res.send(buffer);
+  } catch (err) {
+    // 501: the format is understood but its engine (pandoc/Chrome) is unavailable.
+    res.status(501).json({ error: err.message });
+  }
 });
 
 // --- Revision (apply selected-text comments / global instruction) --------

@@ -39,6 +39,7 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
 | `server.js` | Express app: static hosting, JSON API, the SSE generation stream. Thin — delegates to `lib/`. |
 | `lib/claude.js` | The only place that spawns the `claude` CLI. `generate()` (streaming) and `revise()` (find/replace edits), plus prompt construction and output parsing. |
 | `lib/docs.js` | Disk persistence. One document = `docs/<id>.md` (body) + `docs/<id>.meta.json` (metadata). No database. |
+| `lib/export.js` | Export to HTML / PDF / docx / pptx. Shells out to Chrome (pdf) and pandoc (docx/pptx); HTML is pure `marked`. |
 | `public/index.html` | Single-page app shell: home (composer + library) and editor views. |
 | `public/app.js` | All client logic: hash routing, streaming render, text-selection comments, revision, the model/effort/web picker, and the conversation panel. |
 | `public/styles.css` | Styling. Document reads in a serif column; UI is sans-serif. |
@@ -101,6 +102,29 @@ All flags live in `lib/claude.js`. Things that are load-bearing:
 - The prompt is fed over **stdin**, not as an argv string, to avoid arg-length
   limits with large documents.
 
+## Export (`lib/export.js`, `GET /api/docs/:id/export?format=…`)
+
+Markdown is the source for all four formats:
+
+- **html** — `marked` + embedded CSS. Pure Node, always available.
+- **pdf** — write the styled HTML to a temp file and print it with headless
+  system Chrome (`--headless=new … --print-to-pdf`). Matches the on-screen look.
+  Chrome is located via `CHROME_PATH` or common macOS install paths.
+- **docx / pptx** — `pandoc` (`-f gfm -t docx|pptx`), fed Markdown on stdin.
+  pptx uses `--slide-level=2` (one slide per H2).
+
+Engines are external tools, not npm deps — consistent with how the app shells out
+to `claude`. A missing engine throws a clear "install X" error; the route maps an
+unknown format to **400** and a missing/failed engine to **501**, so the other
+formats keep working. The client downloads via `fetch` → Blob → `<a download>`,
+surfacing any 4xx/5xx message as a toast.
+
+Gotcha worth remembering: **don't pass `--user-data-dir` to headless Chrome** for
+print-to-pdf — on recent Chrome it triggers a first-run flow that hangs. The
+working flag set is `--headless=new --disable-gpu --no-first-run
+--no-default-browser-check --no-pdf-header-footer --print-to-pdf=…`. (And note
+`html-to-docx` was evaluated and rejected: its output won't open in MS Word.)
+
 ## Data model
 
 `docs/<id>.meta.json`:
@@ -149,6 +173,6 @@ never touch the real `docs/`.
 
 ## Ideas / not yet built
 
-Inline hand-editing of the rendered doc, per-comment "apply individually",
-Markdown/PDF export, and true document-level undo (would require snapshotting the
-Markdown per revision — pruning history today does **not** roll back the doc).
+Inline hand-editing of the rendered doc, per-comment "apply individually", and
+true document-level undo (would require snapshotting the Markdown per revision —
+pruning history today does **not** roll back the doc).

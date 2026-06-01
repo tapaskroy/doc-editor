@@ -325,6 +325,19 @@ button {
 .comment .remove { background: none; border: none; color: var(--muted); font-size: 12px; padding: 2px 6px; }
 .comment .remove:hover { color: var(--accent); }
 
+/* Export */
+.export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.export-btn {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  padding: 9px 0;
+  border-radius: 8px;
+}
+.export-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.export-btn:disabled { opacity: 0.5; cursor: progress; }
+
 /* Selection popover */
 .sel-popover {
   position: absolute;

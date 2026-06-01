@@ -274,6 +274,42 @@ $('#regen-btn').addEventListener('click', () => {
   startGeneration(currentId);
 });
 
+// ---- export -------------------------------------------------------------
+
+document.querySelectorAll('.export-btn').forEach((btn) => {
+  btn.addEventListener('click', () => exportDoc(btn.dataset.format, btn));
+});
+
+async function exportDoc(format, btn) {
+  if (!currentId) return;
+  btn.disabled = true;
+  setStatus('● exporting ' + format);
+  try {
+    const r = await fetch(`/api/docs/${currentId}/export?format=${format}`);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error || r.statusText);
+    }
+    const blob = await r.blob();
+    const m = (r.headers.get('Content-Disposition') || '').match(/filename="(.+?)"/);
+    const name = m ? m[1] : `document.${format}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Exported ' + name);
+  } catch (e) {
+    toast('Export failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    setStatus('');
+  }
+}
+
 // ---- text selection → comment ------------------------------------------
 
 const popover = $('#sel-popover');

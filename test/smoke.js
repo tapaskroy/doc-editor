@@ -122,6 +122,14 @@ async function waitForServer(timeoutMs = 15000) {
     await page.waitForFunction(() => document.querySelectorAll('#history li').length === 2, null, { timeout: 5000 });
     log('conversation panel recorded the revision');
 
+    // 7) Export — HTML needs no external engine, so it always works here.
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 30000 }),
+      page.click('.export-btn[data-format="html"]'),
+    ]);
+    assert(download.suggestedFilename().endsWith('.html'), 'HTML export did not download a .html file');
+    log('exported:', download.suggestedFilename());
+
     if (errors.length) throw new Error('console errors: ' + JSON.stringify(errors));
     log('no console errors');
     console.log('\n✓ SMOKE PASSED');

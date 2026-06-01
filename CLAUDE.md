@@ -243,3 +243,14 @@ on-brand deck rather than the current generic theme. The deck-builder
 (`claude.toDeck`) and renderer (`export.deckToPptx`) are the seams to extend —
 e.g. feed a user template/theme into the renderer and image guidance into the
 deck model.
+
+**Per-doc voice memory.** Style is currently a global picker (localStorage
+`de.skill`), sent per request — not stored on the doc. So switching styles and
+then revising an old doc applies the *current* pick. To make each doc remember
+the voice it was written in, store the skill id on the doc (like `brief`) and
+default the picker to it when the doc opens.
+
+**Broader skill discovery.** `lib/skills.js` scans only `~/.claude/skills` and
+the project's `.claude/skills` — not plugin skills
+(`~/.claude/plugins/**/skills`). Add those roots to `roots()` if writing in a
+plugin-provided style is ever wanted.

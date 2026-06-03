@@ -13,6 +13,12 @@ const skills = require('./lib/skills');
 const attachments = require('./lib/attachments');
 
 const PORT = process.env.PORT || 9999;
+// Bind to loopback only by default: this is a local, single-user, no-auth tool,
+// and binding to all interfaces would let anyone on the same network spawn the
+// `claude` CLI against the user's subscription, read/write/delete their docs, and
+// trigger arbitrary web fetches. Override with HOST (e.g. 0.0.0.0) if you really
+// need LAN access and understand the exposure.
+const HOST = process.env.HOST || '127.0.0.1';
 const app = express();
 
 app.use(express.json({ limit: '30mb' })); // attachments are uploaded as base64 JSON
@@ -276,6 +282,6 @@ app.post('/api/docs/:id/revise', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`\n  📝  Doc editor running at  http://localhost:${PORT}\n`);
 });

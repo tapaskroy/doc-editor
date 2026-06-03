@@ -166,6 +166,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     web,
     style,
     references,
+    addDir: references ? attachments.docDir(id) : null,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),
     onDone: (markdown, usage) => {
@@ -236,7 +237,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     const { history = [], attachments: atts = [] } = docs.readMeta(id);
     const style = skill ? skills.read(skill) : null;
     const references = attachments.referenceBlock(id, atts);
-    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references });
+    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);

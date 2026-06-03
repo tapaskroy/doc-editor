@@ -200,6 +200,14 @@ All flags live in `lib/claude.js`. Things that are load-bearing:
   arbitrary flags). Empty = use the CLI's own default.
 - The prompt is fed over **stdin**, not as an argv string, to avoid arg-length
   limits with large documents.
+- **Writing calls run in a neutral cwd (`RUN_DIR`, a temp dir), NOT the project.**
+  The `claude` CLI auto-loads the project's `CLAUDE.md` (this file) when run in
+  the project tree — which dumped ~11–15k tokens of dev docs into *every*
+  generation/revision as cache-creation, inflating cost ~7–23×. Running in an
+  empty dir drops cache-creation to ~600 tokens. **Don't move these spawns back
+  to the project cwd.** Attachment files (under the project) are reached via
+  `--add-dir <doc's asset dir>`, passed only when references are present, since
+  we're no longer in the project tree.
 
 ## Export (`lib/export.js`, `GET /api/docs/:id/export?format=…`)
 

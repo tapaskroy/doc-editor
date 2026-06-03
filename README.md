@@ -24,6 +24,11 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
     trim if it's off your target length.
 - **Revise**: sends the doc + your selected passages and notes to Claude, which
   returns minimal find/replace edits that the server splices in.
+- **Edit directly (inline)**: the document is editable in place, like a normal
+  editor — type to fix or rewrite anything. Edits autosave (the formatted HTML is
+  converted back to Markdown via `turndown`); no Claude call, no cost. Selecting
+  text to comment still works while editing. (Prose round-trips cleanly; heavy
+  tables are the rough edge.)
 - **Conversation memory**: each document keeps an ordered history of your
   requests (the premise, then every revision), fed back as context on each
   revision — so Claude remembers earlier intent, including facts stated only in

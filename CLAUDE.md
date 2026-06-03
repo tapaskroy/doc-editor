@@ -164,6 +164,31 @@ Notes:
   sent per request, not stored on the doc. Applies to drafting (incl. briefing)
   and revisions; not to the interview/brief/deck steps.
 
+## Inline editing (WYSIWYG → Markdown autosave)
+
+The rendered document (`#doc`) is `contentEditable` by default — the user types
+in place, Google-Docs style, and select-to-comment still works alongside it.
+
+- **Autosave**: an `input` listener debounces (~1s) then converts the edited HTML
+  back to Markdown with **`turndown`** (+ the GFM plugin, served from
+  `node_modules` like `marked`) and `PUT /api/docs/:id/content` persists it. No
+  Claude call — direct edits are free and log no usage.
+- **Source of truth stays Markdown.** The first manual save normalizes the doc to
+  turndown's Markdown flavor (configured to match our conventions: atx headings,
+  `-` bullets, fenced code, `*`/`**`). Prose round-trips cleanly; tables/code are
+  the rough edge (documented tradeoff — chose this over a heavy rich-text editor).
+- **Sync rules (important):**
+  - `renderDoc(html, editable)` is the single entry point for setting `#doc`
+    content — it cancels any pending autosave (so a stale timer can't overwrite
+    Claude's/loaded content) and toggles editability.
+  - Before any Claude op (revise, length-adjust, export) the client calls
+    `flushSave()` so the server reads the latest text. While a draft is streaming,
+    the doc is read-only; it becomes editable on `done`.
+  - `route()` flushes on navigation; `beforeunload` uses `navigator.sendBeacon`
+    (hence the content route accepts POST too) to save on tab close.
+  - If `turndown` fails to load, the doc stays read-only (we never allow edits we
+    can't persist).
+
 ## Conversation memory (important design decision)
 
 Each document keeps an ordered `history` array in its `.meta.json`: the premise
@@ -292,9 +317,10 @@ never touch the real `docs/`.
 
 ## Ideas / not yet built
 
-Inline hand-editing of the rendered doc, per-comment "apply individually", and
-true document-level undo (would require snapshotting the Markdown per revision —
-pruning history today does **not** roll back the doc).
+Per-comment "apply individually", and true document-level version history /
+undo (would require snapshotting the Markdown per revision — pruning history
+today does **not** roll back the doc; native ⌘Z covers in-progress inline typing
+only).
 
 A richer **presentation** path: let the user bring their own slide skills /
 templates, formatting conventions, and images so pptx export produces a polished,

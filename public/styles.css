@@ -249,6 +249,9 @@ button {
   color: var(--ink);
   min-height: 60vh;
 }
+.doc[contenteditable="true"] { outline: none; cursor: text; }
+.doc[contenteditable="true"]:focus { box-shadow: var(--shadow), 0 0 0 2px var(--accent-soft); }
+.save-state { font-size: 12px; color: var(--muted); min-width: 4em; }
 .doc.flash { animation: flash 0.9s ease; }
 @keyframes flash {
   0% { background: var(--accent-soft); }

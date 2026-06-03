@@ -104,6 +104,15 @@ async function waitForServer(timeoutMs = 15000) {
     );
     log('draft generated; title =', JSON.stringify(await page.textContent('#doc-title')));
 
+    // 3b) Inline editing: the doc is editable, and typing autosaves.
+    assert((await page.locator('#doc').getAttribute('contenteditable')) === 'true', 'doc should be editable');
+    await page.click('#doc p');
+    await page.keyboard.press('End');
+    await page.keyboard.type(' Edited-inline.');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === 'Saved', null, { timeout: 6000 });
+    assert(/Edited-inline\./.test(await page.locator('#doc').textContent()), 'inline edit should be present');
+    log('inline edit autosaved');
+
     // 4) Conversation panel shows the premise.
     await page.click('#hist-toggle');
     const histCount = await page.textContent('#hist-count');

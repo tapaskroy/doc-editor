@@ -106,6 +106,7 @@ function initPicker() {
 // ---- routing ------------------------------------------------------------
 
 function route() {
+  if (typeof flushSave === 'function') flushSave(); // persist any pending inline edit before leaving
   const hash = location.hash || '#/';
   const m = hash.match(/^#\/doc\/(.+)$/);
   if (m) showEditor(m[1]);
@@ -113,6 +114,12 @@ function route() {
   else showHome();
 }
 window.addEventListener('hashchange', route);
+// Best-effort save if the tab is closed mid-edit.
+window.addEventListener('beforeunload', () => {
+  if (docDirty && currentId && navigator.sendBeacon) {
+    navigator.sendBeacon(`/api/docs/${currentId}/content`, new Blob([JSON.stringify({ markdown: htmlToMarkdown() })], { type: 'application/json' }));
+  }
+});
 
 function show(view) {
   $('#view-home').classList.toggle('hidden', view !== 'home');
@@ -494,10 +501,85 @@ async function showEditor(id) {
     $('#length-panel').classList.add('hidden');
     startGeneration(id);
   } else {
-    doc.innerHTML = data.html;
+    renderDoc(data.html, true);
     updateLength(data.markdown);
   }
 }
+
+// ---- inline editing (WYSIWYG → Markdown autosave) ----------------------
+
+const td =
+  typeof TurndownService !== 'undefined'
+    ? new TurndownService({
+        headingStyle: 'atx',
+        hr: '---',
+        bulletListMarker: '-',
+        codeBlockStyle: 'fenced',
+        emDelimiter: '*',
+        strongDelimiter: '**',
+        linkStyle: 'inlined',
+      })
+    : null;
+if (td && window.turndownPluginGfm) td.use(window.turndownPluginGfm.gfm);
+
+let saveTimer = null;
+let docDirty = false;
+
+function setSaveState(text) {
+  $('#save-state').textContent = text || '';
+}
+
+// Set the document HTML and optionally make it editable. Cancels any pending
+// autosave so a stale timer can't overwrite programmatic (Claude/load) content.
+function renderDoc(html, editable = true) {
+  clearTimeout(saveTimer);
+  docDirty = false;
+  const doc = $('#doc');
+  doc.classList.remove('empty-state');
+  doc.innerHTML = html;
+  // Only allow editing if the HTML→Markdown converter loaded (else read-only,
+  // so we never let edits happen that we can't persist).
+  doc.contentEditable = editable && td ? 'true' : 'false';
+  setSaveState('');
+}
+
+function htmlToMarkdown() {
+  return td.turndown($('#doc').innerHTML).trim();
+}
+
+async function doSave() {
+  if (!currentId || !docDirty) return;
+  docDirty = false;
+  setSaveState('Saving…');
+  try {
+    const res = await api.json(`/api/docs/${currentId}/content`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown: htmlToMarkdown() }),
+    });
+    if (res.title) $('#doc-title').textContent = res.title;
+    setSaveState('Saved');
+    setTimeout(() => { if (!docDirty) setSaveState(''); }, 1500);
+  } catch (e) {
+    docDirty = true; // allow a retry on the next edit
+    setSaveState('Save failed');
+    toast('Autosave failed: ' + e.message);
+  }
+}
+
+// Flush any pending edit immediately — call before a Claude op reads the doc.
+async function flushSave() {
+  clearTimeout(saveTimer);
+  if (docDirty) await doSave();
+}
+
+$('#doc').addEventListener('input', () => {
+  if ($('#doc').getAttribute('contenteditable') !== 'true') return;
+  docDirty = true;
+  setSaveState('Editing…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(doSave, 1000);
+});
 
 // ---- length readout + target adjustment --------------------------------
 
@@ -625,12 +707,13 @@ async function adjustLength(target, over) {
   $('#length-adjust').disabled = true;
   setStatus('● adjusting length');
   try {
+    await flushSave(); // persist any manual edits before Claude reads the doc
     const res = await api.json(`/api/docs/${currentId}/revise`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ instruction, model: settings.model, effort: settings.effort, web: false, skill: settings.skill }),
     });
-    $('#doc').innerHTML = res.html;
+    renderDoc(res.html, true);
     if (res.history) {
       history = res.history;
       renderHistory();
@@ -648,10 +731,14 @@ async function adjustLength(target, over) {
 
 function startGeneration(id) {
   const doc = $('#doc');
+  clearTimeout(saveTimer);
+  docDirty = false;
+  doc.contentEditable = 'false'; // not editable while being written
   doc.innerHTML = '';
   doc.classList.add('empty-state');
   doc.textContent = 'Claude is drafting…';
   setStatus('● drafting');
+  setSaveState('');
   $('#revise-btn').disabled = true;
 
   let buf = '';
@@ -683,8 +770,7 @@ function startGeneration(id) {
   });
   es.addEventListener('done', (e) => {
     const d = JSON.parse(e.data);
-    doc.classList.remove('empty-state');
-    doc.innerHTML = d.html;
+    renderDoc(d.html, true); // now editable
     $('#doc-title').textContent = d.title || 'Untitled';
     if (d.history) {
       history = d.history;
@@ -725,6 +811,7 @@ async function exportDoc(format, btn) {
   btn.disabled = true;
   setStatus('● exporting ' + format);
   try {
+    await flushSave(); // export the latest, including unsaved manual edits
     const qs = new URLSearchParams({ format });
     if (settings.model) qs.set('model', settings.model);
     if (settings.effort) qs.set('effort', settings.effort);
@@ -859,13 +946,14 @@ $('#revise-btn').addEventListener('click', async () => {
   if (HAS_HIGHLIGHT) CSS.highlights.delete('comment-quote');
 
   try {
+    await flushSave(); // persist any manual edits before Claude reads the doc
     const res = await api.json(`/api/docs/${currentId}/revise`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const doc = $('#doc');
-    doc.innerHTML = res.html;
+    renderDoc(res.html, true);
     doc.classList.remove('flash');
     void doc.offsetWidth; // restart animation
     doc.classList.add('flash');

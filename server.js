@@ -30,6 +30,13 @@ app.get('/media/:docId/:name', (req, res) => {
 app.get('/vendor/marked.js', (req, res) => {
   res.type('application/javascript').sendFile(path.join(__dirname, 'node_modules/marked/marked.min.js'));
 });
+// turndown (+ GFM plugin) converts the edited HTML back to Markdown in the browser.
+app.get('/vendor/turndown.js', (req, res) => {
+  res.type('application/javascript').sendFile(path.join(__dirname, 'node_modules/turndown/dist/turndown.js'));
+});
+app.get('/vendor/turndown-gfm.js', (req, res) => {
+  res.type('application/javascript').sendFile(path.join(__dirname, 'node_modules/turndown-plugin-gfm/dist/turndown-plugin-gfm.js'));
+});
 
 // Browsers auto-request a favicon; answer quietly with an inline document emoji.
 app.get('/favicon.ico', (req, res) => {
@@ -87,6 +94,20 @@ app.post('/api/intake', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Inline editing: save the document's Markdown (converted from the edited HTML
+// client-side). No Claude call — this is a free, direct edit; just persist it.
+// PUT for normal autosave; POST too so navigator.sendBeacon (close-tab) works.
+function saveContent(req, res) {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const { markdown } = req.body || {};
+  if (typeof markdown !== 'string') return res.status(400).json({ error: 'markdown (string) required' });
+  const meta = docs.setMarkdown(id, markdown);
+  res.json({ title: meta.title, updatedAt: meta.updatedAt });
+}
+app.put('/api/docs/:id/content', saveContent);
+app.post('/api/docs/:id/content', saveContent);
 
 app.get('/api/docs/:id', (req, res) => {
   if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });

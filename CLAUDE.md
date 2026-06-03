@@ -213,6 +213,10 @@ All flags live in `lib/claude.js`. Things that are load-bearing:
 
 - **`--system-prompt`** replaces Claude Code's default agent prompt with a lean
   writing/editing prompt. This strips coding-agent scaffolding (and cost).
+- **`ANTI_TIC_NOTE`** is appended to generate/revise/deck system prompts as a
+  baseline (regardless of chosen voice): a hard ban on em/en dashes plus a short
+  avoid-list of common AI tics. A selected voice skill (e.g. `tapas-voice`)
+  layers its own checklist on top.
 - **Tools are off by default** (`--tools none`) — it's a writing engine. When the
   **Web** toggle is on, the app passes
   `--tools WebFetch WebSearch --allowedTools WebFetch WebSearch`. Both halves

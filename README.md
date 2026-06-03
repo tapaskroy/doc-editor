@@ -38,6 +38,13 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
   about whether to **embed a picture** in the output (you can also just ask).
   Embedded images render in-app and are baked into HTML/PDF/Word exports.
   (PowerPoint stays text-only for now.)
+- **Cost tracking**: every Claude call a document triggers (draft, each revision,
+  briefing interview, brief-compile, length adjust, pptx deck-build) is logged
+  with its token usage and reported cost. The editor shows a running
+  `≈ $ (API-equivalent) · N tokens` with a per-operation breakdown, and the
+  library shows per-doc spend. Tokens are stored as the source of truth (so cost
+  can be recomputed); the `$` is the CLI's API-equivalent estimate — on a Claude
+  Code subscription it's a relative/awareness number, not money billed.
 - **Voice / style** (Style picker): write in a chosen *skill*. The app lists the
   skills in `~/.claude/skills` and the project's `.claude/skills` (each a folder
   with a `SKILL.md`); pick one and its guide is appended to the writing prompt so

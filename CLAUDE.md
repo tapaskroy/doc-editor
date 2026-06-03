@@ -118,6 +118,30 @@ own whether a picture belongs in the output.
   Code's native file/image reading, works with our spawn model, and handles
   images + PDFs + text uniformly. Office formats go through pandoc first.
 
+## Cost / usage tracking
+
+Every Claude call attributable to a doc is logged to `meta.usage` (an array of
+`{op, model, usd, input, output, cacheRead, cacheCreation, at}`). The CLI reports
+both token `usage` and `total_cost_usd` on every call (stream `result` event and
+the json envelope); `claude.extractUsage()` normalizes either shape and
+`sumUsage()` combines multi-attempt calls (e.g. revise's retry).
+
+- Ops recorded: `draft` / `regenerate` (generate), `revise` (also length-adjust),
+  `briefing` (interview turns — accumulated client-side and submitted on doc
+  create, since they predate the doc), `brief` (compileBrief), `export-pptx`
+  (toDeck). Other exports make no Claude call.
+- Threaded out of `lib/claude.js`: `generate`'s `onDone(markdown, usage)`,
+  `runTurn` returns `{text, usage}`, and `revise/toDeck/interview/compileBrief`
+  return usage alongside their result.
+- The client (`summarizeUsage`) totals events for the editor Cost panel and the
+  per-doc figure in the library. Display is **$ headline + token breakdown**.
+- **Design choice — store both, tokens as truth.** Token counts never go stale
+  and let cost be recomputed under any pricing; `$` is the comparable headline.
+- **Subscription caveat.** `total_cost_usd` is the *API-equivalent* cost, not
+  money billed (the user is on a Claude Code subscription, `apiKeySource: none`).
+  The UI labels it "API-equivalent." Note most of a short call's cost is
+  cache-creation of the system prompt, not output — every call has a baseline.
+
 ## Voice / style skills
 
 The Style picker lets the user write in a chosen voice without baking any voice

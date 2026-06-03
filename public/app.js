@@ -135,8 +135,10 @@ async function showHome() {
   }
   for (const d of list) {
     const li = document.createElement('li');
+    const spend = summarizeUsage(d.usage || []).usd;
     li.innerHTML = `
       <a href="#/doc/${d.id}">${escapeHtml(d.title || 'Untitled')}</a>
+      ${spend > 0 ? `<span class="cost" title="API-equivalent spend">${fmtUsd(spend)}</span>` : ''}
       <span class="meta">${timeAgo(d.updatedAt)}</span>
       <button class="del" title="Delete">✕</button>`;
     li.querySelector('.del').addEventListener('click', async () => {
@@ -264,6 +266,7 @@ $('#talk-btn').addEventListener('click', () => {
 // ---- briefing (intake interview) ---------------------------------------
 
 let intakeMessages = []; // [{ role: 'user' | 'assistant', content }]
+let intakeUsage = []; // usage events from each interviewer turn (billed to the doc on draft)
 
 function renderThread() {
   const t = $('#brief-thread');
@@ -294,12 +297,13 @@ async function intakeTurn() {
   showThinking(true);
   $('#brief-send').disabled = true;
   try {
-    const { reply } = await api.json('/api/intake', {
+    const { reply, usage } = await api.json('/api/intake', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: intakeMessages, model: settings.model, effort: settings.effort }),
     });
     intakeMessages.push({ role: 'assistant', content: reply });
+    if (usage) intakeUsage.push(usage);
   } catch (e) {
     intakeMessages.push({ role: 'assistant', content: '(Sorry — I hit an error: ' + e.message + '. You can still hit “Draft it now”.)' });
   } finally {
@@ -319,6 +323,7 @@ async function showBrief() {
     return;
   }
   intakeMessages = [{ role: 'user', content: briefPremise }];
+  intakeUsage = [];
   briefPremise = ''; // consumed
   renderThread();
   $('#brief-input').focus();
@@ -353,7 +358,7 @@ $('#brief-draft').addEventListener('click', async () => {
     const meta = await api.json('/api/docs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ premise, intake: intakeMessages, model: settings.model, effort: settings.effort }),
+      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort }),
     });
     if (pendingAttachments.length) {
       btn.textContent = 'Uploading attachments…';
@@ -482,6 +487,7 @@ async function showEditor(id) {
   currentAttachments = data.attachments || [];
   renderHistory();
   renderAttachments();
+  renderCost(data.usage || []);
 
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.
@@ -498,6 +504,56 @@ async function showEditor(id) {
 function countWords(md) {
   return (String(md).match(/[A-Za-z0-9’'\-]+/g) || []).length;
 }
+
+// ---- cost / usage -------------------------------------------------------
+
+function summarizeUsage(events = []) {
+  const totals = { usd: 0, tokens: 0, byOp: {} };
+  for (const e of events) {
+    const tok = (e.input || 0) + (e.output || 0) + (e.cacheRead || 0) + (e.cacheCreation || 0);
+    totals.usd += e.usd || 0;
+    totals.tokens += tok;
+    const op = e.op || 'other';
+    totals.byOp[op] = totals.byOp[op] || { usd: 0, tokens: 0, count: 0 };
+    totals.byOp[op].usd += e.usd || 0;
+    totals.byOp[op].tokens += tok;
+    totals.byOp[op].count += 1;
+  }
+  return totals;
+}
+
+function fmtUsd(n) {
+  if (n > 0 && n < 0.001) return '<$0.001';
+  return '$' + (n < 1 ? n.toFixed(3) : n.toFixed(2));
+}
+
+function renderCost(events) {
+  const panel = $('#cost-panel');
+  if (!events || !events.length) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  const s = summarizeUsage(events);
+  $('#cost-usd').textContent = fmtUsd(s.usd);
+  $('#cost-tokens').textContent = s.tokens.toLocaleString();
+  const ul = $('#cost-breakdown');
+  ul.innerHTML = '';
+  for (const [op, v] of Object.entries(s.byOp)) {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<span class="op">${op}${v.count > 1 ? ' ×' + v.count : ''}</span>` +
+      `<span>${fmtUsd(v.usd)} · ${v.tokens.toLocaleString()} tok</span>`;
+    ul.appendChild(li);
+  }
+}
+
+$('#cost-toggle').addEventListener('click', () => {
+  const hidden = $('#cost-breakdown').classList.toggle('hidden');
+  const btn = $('#cost-toggle');
+  btn.textContent = hidden ? 'details' : 'hide';
+  btn.setAttribute('aria-expanded', String(!hidden));
+});
 
 function updateLength(markdown) {
   const words = countWords(markdown);
@@ -543,6 +599,7 @@ async function adjustLength(target, over) {
       renderHistory();
     }
     updateLength(res.markdown);
+    if (res.usage) renderCost(res.usage);
     toast('Adjusted length.');
   } catch (e) {
     toast('Could not adjust: ' + e.message);
@@ -597,6 +654,7 @@ function startGeneration(id) {
       renderHistory();
     }
     updateLength(d.markdown);
+    if (d.usage) renderCost(d.usage);
     setStatus('');
     $('#revise-btn').disabled = comments.length === 0 && !$('#instruction').value.trim();
     es.close();
@@ -784,6 +842,7 @@ $('#revise-btn').addEventListener('click', async () => {
       renderHistory();
     }
     updateLength(res.markdown);
+    if (res.usage) renderCost(res.usage);
 
     const ok = res.applied.filter((a) => a.ok).length;
     const failed = res.applied.filter((a) => !a.ok);

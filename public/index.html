@@ -84,6 +84,15 @@
         <article id="doc" class="doc"></article>
 
         <aside class="sidebar">
+          <div id="cost-panel" class="panel cost-panel hidden">
+            <h3>Cost <button id="cost-toggle" class="mini" aria-expanded="false">details</button></h3>
+            <div class="cost-headline">
+              <span id="cost-usd">$0.000</span>
+              <span class="cost-sub">API-equivalent · <span id="cost-tokens">0</span> tokens</span>
+            </div>
+            <ul id="cost-breakdown" class="cost-breakdown hidden"></ul>
+          </div>
+
           <div id="length-panel" class="panel length-panel hidden">
             <div class="length-stat"><span id="length-readout">—</span></div>
             <div id="length-target" class="length-target hidden">

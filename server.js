@@ -52,14 +52,19 @@ app.get('/api/skills', (req, res) => {
 });
 
 app.post('/api/docs', async (req, res) => {
-  const { premise = '', intake, model, effort } = req.body || {};
+  const { premise = '', intake, intakeUsage, model, effort } = req.body || {};
   let meta = docs.create(premise);
+  // Carry over the cost of the briefing interview turns (run before the doc existed).
+  if (Array.isArray(intakeUsage) && intakeUsage.length) {
+    meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', ...u })));
+  }
   // If this doc came from a "talk about it first" session, compile the planning
   // conversation into a structured brief that drives a more targeted draft.
   if (Array.isArray(intake) && intake.length) {
     try {
-      const brief = await claude.compileBrief(intake, { model, effort });
+      const { brief, usage } = await claude.compileBrief(intake, { model, effort });
       meta = docs.setBrief(meta.id, brief);
+      meta = docs.addUsage(meta.id, { op: 'brief', ...usage });
     } catch (err) {
       // Non-fatal: fall back to a plain premise-driven draft.
       console.error('brief compilation failed:', err.message);
@@ -69,15 +74,15 @@ app.post('/api/docs', async (req, res) => {
 });
 
 // One interviewer turn for the "talk about it first" intake (stateless;
-// the client holds the running transcript).
+// the client holds the running transcript and accumulates usage).
 app.post('/api/intake', async (req, res) => {
   const { messages = [], model, effort } = req.body || {};
   if (!Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ error: 'no messages provided' });
   }
   try {
-    const reply = await claude.interview(messages, { model, effort });
-    res.json({ reply });
+    const { reply, usage } = await claude.interview(messages, { model, effort });
+    res.json({ reply, usage });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -140,6 +145,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
   const web = req.query.web === 'true';
   const style = req.query.skill ? skills.read(req.query.skill) : null;
   const references = attachments.referenceBlock(id, atts);
+  const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
   // A briefed doc generates from its structured brief; otherwise from the premise.
   const genPrompt = brief ? claude.briefToPrompt(brief) : premise;
   // Start the conversation fresh for this (re)generation; the premise is turn 1.
@@ -162,9 +168,10 @@ app.get('/api/docs/:id/generate', (req, res) => {
     references,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),
-    onDone: (markdown) => {
-      const meta = docs.setMarkdown(id, markdown);
-      send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history });
+    onDone: (markdown, usage) => {
+      docs.setMarkdown(id, markdown);
+      const meta = docs.addUsage(id, { op, ...usage });
+      send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history, usage: meta.usage });
       res.end();
     },
     onError: (message) => {
@@ -195,8 +202,14 @@ app.get('/api/docs/:id/export', async (req, res) => {
     const markdown = docs.getMarkdown(id);
     const { model, effort } = req.query;
     // pptx is built by having Claude restructure the doc into a slide deck first.
-    const deckBuilder = (md) => claude.toDeck(md, { model, effort });
+    let deckUsage = null;
+    const deckBuilder = async (md) => {
+      const { deck, usage } = await claude.toDeck(md, { model, effort });
+      deckUsage = usage;
+      return deck;
+    };
     const { buffer, contentType, ext } = await exporter.exportDoc(format, markdown, title, { deckBuilder, docId: id });
+    if (deckUsage) docs.addUsage(id, { op: 'export-pptx', ...deckUsage });
     const safe = (title || 'document').replace(/[^\w\d ]+/g, '').trim().replace(/\s+/g, ' ') || 'document';
     res.set('Content-Type', contentType);
     res.set('Content-Disposition', `attachment; filename="${safe}.${ext}"`);
@@ -223,16 +236,18 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     const { history = [], attachments: atts = [] } = docs.readMeta(id);
     const style = skill ? skills.read(skill) : null;
     const references = attachments.referenceBlock(id, atts);
-    const { edits, request } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references });
+    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
-    const meta = docs.setMarkdown(id, updated);
+    docs.setMarkdown(id, updated);
+    const meta = docs.addUsage(id, { op: 'revise', ...usage });
     res.json({
       markdown: updated,
       html: render(updated),
       title: meta.title,
       applied,
       history: meta.history,
+      usage: meta.usage,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

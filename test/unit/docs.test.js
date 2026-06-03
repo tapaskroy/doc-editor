@@ -80,6 +80,20 @@ test('list() returns documents newest-first and re-sorts on update', async () =>
   assert.equal(list[0].id, a.id);
 });
 
+test('addUsage appends timestamped usage events', () => {
+  const { id } = docs.create('x');
+  docs.addUsage(id, { op: 'draft', model: 'sonnet', usd: 0.03, input: 10, output: 20 });
+  docs.addUsage(id, [
+    { op: 'revise', usd: 0.01 },
+    { op: 'revise', usd: 0.01 },
+  ]);
+  const u = docs.readMeta(id).usage;
+  assert.equal(u.length, 3);
+  assert.equal(u[0].op, 'draft');
+  assert.ok(u[0].at); // timestamped
+  assert.equal(u.filter((e) => e.op === 'revise').length, 2);
+});
+
 test('remove() deletes both files', () => {
   const { id } = docs.create('x');
   docs.setMarkdown(id, '# X');

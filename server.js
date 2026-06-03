@@ -56,7 +56,7 @@ app.post('/api/docs', async (req, res) => {
   let meta = docs.create(premise);
   // Carry over the cost of the briefing interview turns (run before the doc existed).
   if (Array.isArray(intakeUsage) && intakeUsage.length) {
-    meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', ...u })));
+    meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', requested: model || '', ...u })));
   }
   // If this doc came from a "talk about it first" session, compile the planning
   // conversation into a structured brief that drives a more targeted draft.
@@ -64,7 +64,7 @@ app.post('/api/docs', async (req, res) => {
     try {
       const { brief, usage } = await claude.compileBrief(intake, { model, effort });
       meta = docs.setBrief(meta.id, brief);
-      meta = docs.addUsage(meta.id, { op: 'brief', ...usage });
+      meta = docs.addUsage(meta.id, { op: 'brief', requested: model || '', ...usage });
     } catch (err) {
       // Non-fatal: fall back to a plain premise-driven draft.
       console.error('brief compilation failed:', err.message);
@@ -170,7 +170,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     onDelta: (text) => send('delta', { text }),
     onDone: (markdown, usage) => {
       docs.setMarkdown(id, markdown);
-      const meta = docs.addUsage(id, { op, ...usage });
+      const meta = docs.addUsage(id, { op, requested: model || '', ...usage });
       send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history, usage: meta.usage });
       res.end();
     },
@@ -209,7 +209,7 @@ app.get('/api/docs/:id/export', async (req, res) => {
       return deck;
     };
     const { buffer, contentType, ext } = await exporter.exportDoc(format, markdown, title, { deckBuilder, docId: id });
-    if (deckUsage) docs.addUsage(id, { op: 'export-pptx', ...deckUsage });
+    if (deckUsage) docs.addUsage(id, { op: 'export-pptx', requested: model || '', ...deckUsage });
     const safe = (title || 'document').replace(/[^\w\d ]+/g, '').trim().replace(/\s+/g, ' ') || 'document';
     res.set('Content-Type', contentType);
     res.set('Content-Disposition', `attachment; filename="${safe}.${ext}"`);
@@ -240,7 +240,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);
-    const meta = docs.addUsage(id, { op: 'revise', ...usage });
+    const meta = docs.addUsage(id, { op: 'revise', requested: model || '', ...usage });
     res.json({
       markdown: updated,
       html: render(updated),

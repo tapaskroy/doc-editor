@@ -507,18 +507,39 @@ function countWords(md) {
 
 // ---- cost / usage -------------------------------------------------------
 
+// Reduce an actual model id (e.g. claude-haiku-4-5-20251001) to a family name.
+function modelFamily(m) {
+  if (!m) return '';
+  if (/opus/i.test(m)) return 'opus';
+  if (/sonnet/i.test(m)) return 'sonnet';
+  if (/haiku/i.test(m)) return 'haiku';
+  return m;
+}
+
 function summarizeUsage(events = []) {
-  const totals = { usd: 0, tokens: 0, byOp: {} };
+  const totals = { usd: 0, tokens: 0, byOp: {}, downgrades: [] };
+  const dg = {};
   for (const e of events) {
     const tok = (e.input || 0) + (e.output || 0) + (e.cacheRead || 0) + (e.cacheCreation || 0);
     totals.usd += e.usd || 0;
     totals.tokens += tok;
     const op = e.op || 'other';
-    totals.byOp[op] = totals.byOp[op] || { usd: 0, tokens: 0, count: 0 };
-    totals.byOp[op].usd += e.usd || 0;
-    totals.byOp[op].tokens += tok;
-    totals.byOp[op].count += 1;
+    const fam = modelFamily(e.model);
+    const b = totals.byOp[op] || (totals.byOp[op] = { usd: 0, tokens: 0, count: 0, models: new Set() });
+    b.usd += e.usd || 0;
+    b.tokens += tok;
+    b.count += 1;
+    if (fam) b.models.add(fam);
+    // Downgrade = an explicitly requested model that didn't match what actually ran.
+    const req = (e.requested || '').toLowerCase();
+    if (req && fam && req !== fam) {
+      const k = req + '→' + fam;
+      dg[k] = dg[k] || { requested: req, actual: fam, count: 0 };
+      dg[k].count += 1;
+    }
   }
+  for (const op of Object.keys(totals.byOp)) totals.byOp[op].models = [...totals.byOp[op].models];
+  totals.downgrades = Object.values(dg);
   return totals;
 }
 
@@ -537,12 +558,28 @@ function renderCost(events) {
   const s = summarizeUsage(events);
   $('#cost-usd').textContent = fmtUsd(s.usd);
   $('#cost-tokens').textContent = s.tokens.toLocaleString();
+
+  // Warn when a requested model was silently downgraded (e.g. Opus rate limit).
+  const warn = $('#cost-warn');
+  if (s.downgrades.length) {
+    warn.classList.remove('hidden');
+    warn.innerHTML =
+      '⚠ ' +
+      s.downgrades
+        .map((d) => `Requested <b>${d.requested}</b> but ran <b>${d.actual}</b> on ${d.count} call${d.count > 1 ? 's' : ''}`)
+        .join('; ') +
+      ' — likely a rate-limit downgrade on your subscription.';
+  } else {
+    warn.classList.add('hidden');
+  }
+
   const ul = $('#cost-breakdown');
   ul.innerHTML = '';
   for (const [op, v] of Object.entries(s.byOp)) {
+    const model = v.models.length ? v.models.join('/') : '—';
     const li = document.createElement('li');
     li.innerHTML =
-      `<span class="op">${op}${v.count > 1 ? ' ×' + v.count : ''}</span>` +
+      `<span class="op">${op}${v.count > 1 ? ' ×' + v.count : ''} <span class="model">${model}</span></span>` +
       `<span>${fmtUsd(v.usd)} · ${v.tokens.toLocaleString()} tok</span>`;
     ul.appendChild(li);
   }

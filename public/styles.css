@@ -21,6 +21,9 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* App shell: fixed top bar, the active view fills the rest of the viewport. */
+body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
 .hidden { display: none !important; }
 
 /* Top bar */
@@ -31,8 +34,7 @@ html, body {
   padding: 12px 22px;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
   z-index: 30;
 }
 .brand {
@@ -99,7 +101,11 @@ button {
 .ghost:hover { border-color: var(--muted); color: var(--ink); }
 
 /* Layout */
-.view { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
+.view { flex: 1 1 auto; min-height: 0; }
+/* Home & brief: a normal centered, scrollable page. */
+#view-home, #view-brief { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; overflow-y: auto; box-sizing: border-box; width: 100%; }
+/* Editor: full-width two-pane area; scrolls horizontally only if too narrow. */
+#view-editor { overflow-x: auto; overflow-y: hidden; }
 
 /* Home composer */
 .composer { max-width: 720px; }
@@ -254,29 +260,37 @@ button {
 .doc-list .del:hover { color: var(--accent); }
 .empty { color: var(--muted); font-style: italic; }
 
-/* Editor grid */
+/* Editor grid: fixed US-Letter-width page column + flexible sidebar.
+   Each column scrolls independently; the grid stays at least page+panel wide
+   so the editor view scrolls horizontally when the window is too narrow. */
 .editor-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 32px;
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .editor-grid { grid-template-columns: 1fr; }
+  grid-template-columns: 8.5in minmax(320px, 1fr);
+  gap: 24px;
+  padding: 0 24px;
+  box-sizing: border-box;
+  height: 100%;
+  align-items: stretch;
+  min-width: min-content;
 }
 
-/* Document (reading column) */
+/* The page sits in its own vertical scroll pane (gray gutter top/bottom). */
+.doc-pane { height: 100%; overflow-y: auto; padding: 24px 0; }
+
+/* Document — a faithful 8.5in US Letter page (1in margins, 11in min height). */
 .doc {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 56px 64px;
+  box-sizing: border-box;
+  width: 8.5in;
+  min-height: 11in;
+  padding: 1in;
   font-family: ui-serif, Georgia, "Times New Roman", serif;
   font-size: 18px;
   line-height: 1.7;
   color: var(--ink);
-  min-height: 60vh;
 }
 .doc[contenteditable="true"] { outline: none; cursor: text; }
 .doc[contenteditable="true"]:focus { box-shadow: var(--shadow), 0 0 0 2px var(--accent-soft); }
@@ -326,7 +340,7 @@ button {
 ::highlight(recent-change) { background: #d8f0d0; }
 
 /* Sidebar */
-.sidebar { position: sticky; top: 78px; display: grid; gap: 16px; }
+.sidebar { display: grid; gap: 16px; align-content: start; height: 100%; overflow-y: auto; padding: 24px 4px 24px 0; }
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);

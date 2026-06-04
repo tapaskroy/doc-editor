@@ -324,6 +324,12 @@ timestamp-prefixed and filesystem-safe.
 - No frameworks on the client — vanilla JS, `$ = querySelector`. Keep it that way
   unless there's a strong reason.
 - Client settings (model/effort/web) persist in `localStorage` under `de.*`.
+- **Editor layout**: app shell is a flex column (fixed top bar + the active view
+  fills the rest; `body` itself doesn't scroll). The editor is a two-column grid —
+  a **fixed 8.5in US-Letter page** (`.doc` inside a `.doc-pane` scroll container)
+  and a flexible **sidebar**, each scrolling independently. The grid stays
+  ≥ page+panel wide, so `#view-editor` scrolls **horizontally** when the window is
+  narrower. Home/brief views remain normal centered scrollable pages.
 - Highlights (comment selection, recent changes) use the CSS Custom Highlight
   API, with graceful no-op fallback when unavailable.
 

@@ -350,6 +350,41 @@ app.post('/api/docs/:id/revise', async (req, res) => {
   }
 });
 
+// Persist envelope / context / status / pointers for an email doc.
+app.put('/api/docs/:id/email', (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const meta = docs.setEmail(id, req.body || {});
+  res.json({ email: meta.email, title: meta.title, updatedAt: meta.updatedAt });
+});
+
+// Save the email as a draft in the connected mailbox (the single write commit).
+// The body is split out of the doc markdown (H1 = subject); recipients confirmed
+// at the gate are authoritative. Stores the draftId pointer and flips status.
+app.post('/api/docs/:id/draft', async (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const meta = docs.readMeta(id);
+  if (meta.kind !== 'email') return res.status(400).json({ error: 'not an email' });
+  const { subject, body } = mail.splitDraft(docs.getMarkdown(id));
+  const env = (meta.email && meta.email.envelope) || {};
+  const b = req.body || {};
+  const to = b.to || env.to || [];
+  const cc = b.cc || env.cc || [];
+  const bcc = b.bcc || env.bcc || [];
+  try {
+    const { draftId, usage } = await mail.saveDraft(
+      { to, cc, bcc, subject, body, htmlBody: render(body), replyToMessageId: env.replyToMessageId || null },
+      { model: b.model }
+    );
+    const updated = docs.setEmail(id, { envelope: { to, cc, bcc }, status: 'draft-saved', mailbox: { draftId } });
+    docs.addUsage(id, { op: 'draft-save', requested: b.model || '', ...usage });
+    res.json({ ok: true, draftId, email: updated.email });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // ---- Mail (Phase 1: capability discovery + read ops) -------------------
 // Mail I/O is mediated by `claude -p` against the connected mail MCP; the app
 // adapts to discovered capabilities rather than assuming a provider.

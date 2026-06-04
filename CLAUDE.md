@@ -311,9 +311,16 @@ working flag set is `--headless=new --disable-gpu --no-first-run
 Mail I/O is mediated by `claude -p` against the connected mail MCP (the MCP is
 bound to the CLI, not Node). The engine is **provider-agnostic by dynamic
 capability discovery** — no hardcoded tool names. `capabilities()` runs a one-time
-classification turn → `{connected, server, tools:{searchThreads, readThread,
-listDrafts, createDraft, send}, canAttachToDraft}`; `searchThreads`/`readThread`
-run constrained turns that return structured JSON. Spec: `specs/mail-spec.md`,
+classification turn → `{connected, server, identityAddress, tools:{searchThreads,
+readThread, listDrafts, createDraft, send}, canAttachToDraft}`;
+`searchThreads`/`readThread` run constrained turns that return structured JSON.
+`saveDraft(message)` is the one write op — a turn allowing ONLY the discovered
+`createDraft` tool, passing the staged payload verbatim (recipients normalized to
+bare addresses via `bareEmail`; `replyToMessageId` for threaded replies; `htmlBody`
+rich + `body` plain). The client routes every commit through the **review gate**
+(recipients/lint/identity); `POST /api/docs/:id/draft` then stores the `draftId`
+pointer and flips status to `draft-saved`. Gmail's `create_draft` rejects "Name
+<addr>" recipients and does not support attachments. Spec: `specs/mail-spec.md`,
 design: `design/mail-design.md`.
 
 > **Gotcha (load-bearing):** to use an MCP tool from `claude -p`, pre-approve it

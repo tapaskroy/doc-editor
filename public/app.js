@@ -380,8 +380,10 @@ async function applyMailChrome(data) {
   const canSend = !!(caps.tools && caps.tools.send);
   $('#save-draft-btn').classList.toggle('hidden', !canDraft);
   $('#send-btn').classList.toggle('hidden', !canSend);
+  const saved = (data.email && data.email.status) === 'draft-saved';
+  if (canDraft) $('#save-draft-btn').textContent = saved ? 'Update draft' : 'Save to Drafts';
   $('#mail-identity').textContent = caps.connected
-    ? `Mailbox: ${caps.server || 'connected'}${canSend ? '' : ' · draft-only'}`
+    ? `Mailbox: ${caps.server || 'connected'}${canSend ? '' : ' · draft-only'}${saved ? ' · saved to Drafts ✓' : ''}`
     : 'No mailbox connected';
 }
 
@@ -398,9 +400,101 @@ async function applyMailChrome(data) {
   });
 });
 
-// Save to Drafts / Send — wired to the commit gate in the next phase.
-$('#save-draft-btn').addEventListener('click', () => toast('Save to Drafts arrives next — it goes through the review gate.'));
-$('#send-btn').addEventListener('click', () => toast('Send arrives with the review gate in the next phase.'));
+// ---- the review gate (single commit point before a draft/send) ---------
+
+const parseList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
+
+// Split an email doc's markdown into subject (first H1) + body (the rest).
+function splitEmailMd(md) {
+  const m = String(md || '').match(/^#\s+(.+)$/m);
+  const subject = m ? m[1].trim() : '';
+  let body = String(md || '');
+  if (m) body = body.slice(0, m.index) + body.slice(m.index + m[0].length);
+  return { subject, body: body.trim() };
+}
+
+let gateCtx = null;
+
+async function openGate() {
+  if (!currentId) return;
+  await flushSave(); // persist the latest body before we read it back
+  let data;
+  try {
+    data = await api.json(`/api/docs/${currentId}`);
+  } catch (e) {
+    toast('Could not load this email: ' + e.message);
+    return;
+  }
+  const env = (data.email && data.email.envelope) || {};
+  $('#gate-to').value = (env.to || []).join(', ');
+  $('#gate-cc').value = (env.cc || []).join(', ');
+  $('#gate-bcc').value = (env.bcc || []).join(', ');
+  const { subject, body } = splitEmailMd(data.markdown || '');
+  $('#gate-subject').textContent = subject || '(no subject)';
+  $('#gate-preview').innerHTML = typeof marked !== 'undefined' ? marked.parse(body) : escapeHtml(body);
+  $('#gate-provenance').textContent =
+    data.email && data.email.replyScope === 'sender'
+      ? 'Reply to the sender of the thread (not reply-all). Confirm or edit the recipients.'
+      : 'Confirm or edit the recipients before saving.';
+  const caps = await getMailCaps();
+  $('#gate-identity').textContent = caps.identityAddress ? `Saving as ${caps.identityAddress}` : `Saving to ${caps.server || 'your mailbox'}`;
+  $('#gate-send').classList.toggle('hidden', !(caps.tools && caps.tools.send));
+  gateCtx = { subject, body, data };
+  gateLint();
+  $('#gate-modal').classList.remove('hidden');
+}
+
+// Non-blocking warnings — surfaced, never enforced.
+function gateLint() {
+  if (!gateCtx) return;
+  const { subject, body, data } = gateCtx;
+  const warns = [];
+  const to = parseList($('#gate-to').value);
+  const total = to.length + parseList($('#gate-cc').value).length + parseList($('#gate-bcc').value).length;
+  if (!to.length) warns.push('No “To” recipient — add at least one.');
+  if (!subject.trim()) warns.push('The subject is empty.');
+  const hasOutgoing = ((data.email && data.email.outgoing) || []).length > 0;
+  if (/\battach(ed|ment|ments|ing)?\b/i.test(body) && !hasOutgoing) warns.push('The email mentions an attachment, but none is attached.');
+  if (total >= 8) warns.push(`This will go to ${total} recipients.`);
+  $('#gate-lint').innerHTML = warns.map((w) => `<div class="lint-item">⚠︎ ${escapeHtml(w)}</div>`).join('');
+}
+
+['gate-to', 'gate-cc', 'gate-bcc'].forEach((idd) => $('#' + idd).addEventListener('input', gateLint));
+$('#gate-close').addEventListener('click', () => $('#gate-modal').classList.add('hidden'));
+$('#gate-send').addEventListener('click', () => toast('Sending from the app is not available for this mailbox.'));
+
+$('#gate-save').addEventListener('click', async () => {
+  const btn = $('#gate-save');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Saving to Drafts…';
+  try {
+    const r = await api.json(`/api/docs/${currentId}/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: parseList($('#gate-to').value),
+        cc: parseList($('#gate-cc').value),
+        bcc: parseList($('#gate-bcc').value),
+        model: settings.model,
+      }),
+    });
+    $('#gate-modal').classList.add('hidden');
+    toast(`Saved to Drafts in your mailbox (draft ${String(r.draftId).slice(0, 14)}…).`);
+    const data = await api.json(`/api/docs/${currentId}`);
+    applyMailChrome(data);
+    renderCost(data.usage || []);
+  } catch (e) {
+    toast('Could not save draft: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// Footer actions open the gate (Save) or are gated out (Send, when unsupported).
+$('#save-draft-btn').addEventListener('click', openGate);
+$('#send-btn').addEventListener('click', () => toast('Sending from the app is not available for this mailbox.'));
 
 // ---- attachments --------------------------------------------------------
 

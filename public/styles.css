@@ -522,6 +522,20 @@ button {
 .mail-composer .small { font-size: 12.5px; color: var(--muted); }
 .mail-composer #mail-cap { margin-top: 10px; }
 
+/* ---- review gate modal ---- */
+.gate-card { width: min(720px, 94vw); }
+.gate-body { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.gate-recipients { display: grid; gap: 8px; }
+.gate-recipients label { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.gate-recipients input { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: inherit; background: var(--paper); color: var(--ink); text-transform: none; letter-spacing: normal; }
+.gate-subject-row { font-size: 15px; }
+.gate-k { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-right: 8px; }
+.gate-lint:not(:empty) { background: #fff7e6; border: 1px solid #f0d9a8; border-radius: 8px; padding: 8px 12px; display: grid; gap: 4px; }
+.lint-item { font-size: 13px; color: #8a5a00; }
+.gate-preview-wrap { border: 1px solid var(--line); border-radius: 10px; max-height: 300px; overflow-y: auto; background: var(--paper); }
+.gate-preview { padding: 14px 18px; }
+.gate-preview.doc { width: auto; min-height: 0; box-shadow: none; }
+
 /* ---- email chrome in the editor (envelope + capability footer) ---- */
 .envelope { width: 8.5in; max-width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 18px; margin: 0 auto 14px; box-shadow: var(--shadow); }
 .env-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }

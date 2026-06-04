@@ -256,7 +256,18 @@ per-contact/group registry noted, not built.
 - **Identity:** no MCP `whoami` tool → resolve from config / user-set / own `From`
   (§6).
 
-**Still to validate at build time**
-- **Attachment mechanics:** how `create_draft` (and any `send`) accepts a file
-  (encoding, size limits). The earlier note flags Gmail draft attachments as
-  unreliable; confirm with a concrete write-path test (the spike was read-only).
+**Resolved during Phase 4 (write path built)**
+- **Save to Drafts works end-to-end** against live Gmail: `saveDraft()` →
+  `create_draft` creates a real draft (verified by reading drafts back). Recipients
+  must be **bare addresses** ("Name <addr>" is rejected) → normalized via
+  `bareEmail`; threaded replies use **`replyToMessageId`** (not threadId); body sent
+  as `htmlBody` (rich) + `body` (plain alternative).
+- **Identity** is discoverable after all: the classification turn returns
+  `identityAddress` (Gmail resolved `tapas.roy@…`); the gate shows "Saving as …".
+- **Attachments:** confirmed **not supported** by Gmail `create_draft` ("Creating
+  drafts with attachments is not supported yet") — matches discovered
+  `canAttachToDraft:false`. Phase 5's outgoing-attachment path must warn for Gmail.
+
+**Still open**
+- **Send:** no send-capable MCP connected yet, so the locked-down send call (§11)
+  is designed but unbuilt/untested. The gate hides Send when `send` is null.

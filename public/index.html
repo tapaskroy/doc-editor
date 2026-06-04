@@ -229,6 +229,33 @@
       </div>
     </div>
 
+    <!-- Review gate (the single commit point before a draft/send) -->
+    <div id="gate-modal" class="modal hidden">
+      <div class="modal-card gate-card">
+        <div class="modal-head">
+          <strong>Review before saving to Drafts</strong>
+          <button id="gate-close" class="ghost">Cancel</button>
+        </div>
+        <div class="gate-body">
+          <div class="gate-recipients">
+            <label>To <input id="gate-to" type="text" placeholder="recipient@example.com" /></label>
+            <label>Cc <input id="gate-cc" type="text" placeholder="optional" /></label>
+            <label>Bcc <input id="gate-bcc" type="text" placeholder="optional" /></label>
+            <p id="gate-provenance" class="hint"></p>
+          </div>
+          <div class="gate-subject-row"><span class="gate-k">Subject</span> <span id="gate-subject"></span></div>
+          <div id="gate-lint" class="gate-lint"></div>
+          <div class="gate-preview-wrap"><div id="gate-preview" class="gate-preview doc"></div></div>
+        </div>
+        <div class="modal-foot">
+          <span id="gate-identity" class="hint"></span>
+          <span class="spacer"></span>
+          <button id="gate-save" class="primary">Save to Drafts</button>
+          <button id="gate-send" class="primary hidden">Send</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast hidden"></div>
 
     <script src="/vendor/marked.js"></script>

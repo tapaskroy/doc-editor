@@ -260,7 +260,7 @@ async function loadInbox(force = false) {
   if (mailInboxCache && !force) return renderInbox(mailInboxCache);
   ul.innerHTML = '<li class="hint">Loading recent mail…</li>';
   try {
-    const { threads = [] } = await api.json('/api/mail/inbox');
+    const { threads = [] } = await api.json('/api/mail/inbox' + (force ? '?refresh=1' : ''));
     mailInboxCache = threads;
     renderInbox(threads);
   } catch (e) {
@@ -335,12 +335,20 @@ $('#mail-attach-input').addEventListener('change', (e) => {
   renderChips();
 });
 
+// Each search is a slow Claude+MCP call, so debounce generously, require a couple
+// of characters, and let Enter fire it immediately.
 let mailSearchTimer = null;
 $('#mail-search-input').addEventListener('input', (e) => {
   clearTimeout(mailSearchTimer);
   const q = e.target.value.trim();
-  if (!q) { $('#mail-results').innerHTML = ''; return; }
-  mailSearchTimer = setTimeout(() => searchThreads(q), 450);
+  if (q.length < 2) { $('#mail-results').innerHTML = ''; return; }
+  mailSearchTimer = setTimeout(() => searchThreads(q), 600);
+});
+$('#mail-search-input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  clearTimeout(mailSearchTimer);
+  const q = e.target.value.trim();
+  if (q) searchThreads(q);
 });
 
 async function searchThreads(q) {

@@ -405,9 +405,21 @@ app.get('/api/mail/threads', async (req, res) => {
   }
 });
 
+// The inbox call is slow (a Claude+MCP round trip), so cache it briefly and let
+// the boot pre-warm fill it — repeat opens of the Mail rail are then instant.
+let inboxCache = { at: 0, threads: null };
+const INBOX_TTL = 3 * 60 * 1000;
+async function getInbox(force) {
+  if (!force && inboxCache.threads && Date.now() - inboxCache.at < INBOX_TTL) return inboxCache.threads;
+  const threads = await mail.inbox({ limit: 10 });
+  inboxCache = { at: Date.now(), threads };
+  return threads;
+}
 app.get('/api/mail/inbox', async (req, res) => {
   try {
-    res.json({ threads: await mail.inbox({ limit: 10 }) });
+    const fresh = req.query.refresh === '1';
+    const cached = !fresh && inboxCache.threads && Date.now() - inboxCache.at < INBOX_TTL;
+    res.json({ threads: await getInbox(fresh), cached: !!cached });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -423,4 +435,9 @@ app.get('/api/mail/threads/:id', async (req, res) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`\n  📝  Doc editor running at  http://localhost:${PORT}\n`);
+  // Pre-warm mail capabilities + the Primary inbox so the first Mail open is fast.
+  mail.capabilities()
+    .then(() => getInbox(true))
+    .then((t) => console.log(`  ✉️   Mail ready (${t.length} recent threads cached)\n`))
+    .catch(() => {});
 });

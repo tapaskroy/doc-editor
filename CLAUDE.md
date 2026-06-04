@@ -334,6 +334,16 @@ design: `design/mail-design.md`.
 > and **caches only a usable result**, so a transient miss never disables Mail.
 > (Gmail today: `send → null` (draft-only), `canAttachToDraft → false`.)
 
+**Performance.** Mail spawns run in a **neutral cwd** (`RUN_DIR`, like generation),
+NOT the project — otherwise every call loads `CLAUDE.md` (~36k→8k tokens of
+cache-creation per call). Even so, each call is a ~20-30s `claude -p` + MCP round
+trip (the architectural floor — no persistent session). So: the Primary **inbox is
+cached** server-side (3-min TTL) and **pre-warmed on boot**; `searchThreads` is
+relevance-tuned (translate to a focused query, scope to inbox, never pad) and the
+client debounces + fires on Enter (min 2 chars). Use **sonnet** for mail turns —
+haiku gave no speed win. `mail.inbox()` lists recent Primary threads
+(provider-agnostic; Gmail `in:inbox category:primary`).
+
 ## Data model
 
 `docs/<id>.meta.json`:

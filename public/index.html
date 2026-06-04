@@ -56,7 +56,7 @@
           <button id="attach-btn" class="ghost" title="Attach pictures or documents for Claude to use as reference">📎 Attach</button>
           <input id="attach-input" type="file" multiple hidden />
         </div>
-        <ul id="attach-chips" class="chips"></ul>
+        <ul id="attach-chips" class="chips js-chips"></ul>
         <p class="sub small">“Draft it” writes immediately. “Let's talk” has Claude interview you about goal, audience, length and tone first, for a more targeted draft.</p>
       </section>
 
@@ -80,9 +80,18 @@
           <p id="mail-status" class="hint"></p>
         </aside>
         <section class="mail-main">
-          <div id="mail-empty" class="mail-empty">
-            <h1>Mail</h1>
-            <p class="sub">Compose a new email, or search a thread on the left to reply. Refine it with the full writing surface, then save it to your mailbox drafts or send it, through whatever mail account you've connected.</p>
+          <div class="mail-composer">
+            <h1>What email do you want to write?</h1>
+            <p class="sub">Describe it. Claude drafts a subject and body; then refine it like any document and save it to your mailbox drafts. Or search a thread on the left to reply.</p>
+            <textarea id="mail-premise" placeholder="e.g. A short note to Priya asking her to review the Q3 plan and send comments by Thursday…"></textarea>
+            <div class="composer-actions">
+              <button id="mail-draft" class="primary">Draft it →</button>
+              <button id="mail-talk" class="ghost">Let's talk about it first →</button>
+              <button id="mail-attach-btn" class="ghost" title="Attach pictures or documents for Claude to use as reference">📎 Attach</button>
+              <input id="mail-attach-input" type="file" multiple hidden />
+            </div>
+            <ul id="mail-attach-chips" class="chips js-chips"></ul>
+            <p class="sub small">“Draft it” writes immediately. “Let's talk” has Claude interview you first, for a more targeted email.</p>
             <p id="mail-cap" class="hint"></p>
           </div>
         </section>

@@ -224,10 +224,29 @@ async function showMail() {
   for (const d of emails) {
     const li = document.createElement('li');
     const status = (d.email && d.email.status) || 'composing';
-    li.innerHTML =
+    const main = document.createElement('div');
+    main.className = 'mail-item-main';
+    main.innerHTML =
       `<span class="subj">${escapeHtml(d.title || 'Untitled')}</span>` +
       `<span class="meta"><span class="tag">${status}</span> · ${timeAgo(d.updatedAt)}</span>`;
-    li.addEventListener('click', () => { location.hash = `#/doc/${d.id}`; });
+    main.addEventListener('click', () => { location.hash = `#/doc/${d.id}`; });
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.title = 'Delete this email draft';
+    del.textContent = '✕';
+    del.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (!confirm(`Delete “${d.title || 'Untitled'}”? This removes the draft from doc-editor; it does not touch your mailbox.`)) return;
+      try {
+        await api.json(`/api/docs/${d.id}`, { method: 'DELETE' });
+      } catch (e) {
+        toast('Delete failed: ' + e.message);
+        return;
+      }
+      showMail();
+    });
+    li.appendChild(main);
+    li.appendChild(del);
     ul.appendChild(li);
   }
 }
@@ -246,7 +265,51 @@ async function composeEmail(init = {}) {
   }
 }
 
-$('#mail-compose').addEventListener('click', () => composeEmail());
+// Rail "Compose new" resets the composer in the right pane.
+$('#mail-compose').addEventListener('click', () => {
+  $('#mail-premise').value = '';
+  $('#mail-premise').focus();
+});
+
+// Draft it → create the email and stream the first draft (mirrors the home flow).
+$('#mail-draft').addEventListener('click', async () => {
+  const premise = $('#mail-premise').value.trim();
+  if (!premise) { $('#mail-premise').focus(); return; }
+  const btn = $('#mail-draft');
+  btn.disabled = true;
+  try {
+    const meta = await api.json('/api/docs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'email', premise }),
+    });
+    $('#mail-premise').value = '';
+    if (pendingAttachments.length) { btn.textContent = 'Uploading…'; await uploadPending(meta.id); }
+    location.hash = `#/doc/${meta.id}`;
+  } catch (e) {
+    toast('Could not create email: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Draft it →';
+  }
+});
+
+// Let's talk about it first → the intake interview, flagged to draft an email.
+$('#mail-talk').addEventListener('click', () => {
+  const premise = $('#mail-premise').value.trim();
+  if (!premise) { $('#mail-premise').focus(); return; }
+  briefPremise = premise;
+  briefKind = 'email';
+  $('#mail-premise').value = '';
+  location.hash = '#/brief';
+});
+
+$('#mail-attach-btn').addEventListener('click', () => $('#mail-attach-input').click());
+$('#mail-attach-input').addEventListener('change', (e) => {
+  pendingAttachments.push(...e.target.files);
+  e.target.value = '';
+  renderChips();
+});
 
 let mailSearchTimer = null;
 $('#mail-search-input').addEventListener('input', (e) => {
@@ -372,20 +435,23 @@ async function uploadAttachment(docId, file) {
 let pendingAttachments = [];
 
 function renderChips() {
-  const ul = $('#attach-chips');
-  ul.innerHTML = '';
-  pendingAttachments.forEach((f, i) => {
-    const li = document.createElement('li');
-    li.textContent = `${ATT_ICON[guessKind(f)] || '📎'} ${f.name}`;
-    const x = document.createElement('button');
-    x.className = 'x';
-    x.textContent = '✕';
-    x.addEventListener('click', () => {
-      pendingAttachments.splice(i, 1);
-      renderChips();
+  // Shared pending-attachment list, mirrored into every composer's chip tray
+  // (home and mail) so either entry point shows the same picks.
+  document.querySelectorAll('.js-chips').forEach((ul) => {
+    ul.innerHTML = '';
+    pendingAttachments.forEach((f, i) => {
+      const li = document.createElement('li');
+      li.textContent = `${ATT_ICON[guessKind(f)] || '📎'} ${f.name}`;
+      const x = document.createElement('button');
+      x.className = 'x';
+      x.textContent = '✕';
+      x.addEventListener('click', () => {
+        pendingAttachments.splice(i, 1);
+        renderChips();
+      });
+      li.appendChild(x);
+      ul.appendChild(li);
     });
-    li.appendChild(x);
-    ul.appendChild(li);
   });
 }
 
@@ -419,7 +485,9 @@ async function uploadPending(docId) {
 }
 
 // "Let's talk about it first" — stash the starting idea, open the intake chat.
+// briefKind carries whether the resulting draft is a document or an email.
 let briefPremise = '';
+let briefKind = '';
 $('#talk-btn').addEventListener('click', () => {
   const premise = $('#premise').value.trim();
   if (!premise) {
@@ -427,6 +495,7 @@ $('#talk-btn').addEventListener('click', () => {
     return;
   }
   briefPremise = premise;
+  briefKind = '';
   $('#premise').value = '';
   location.hash = '#/brief';
 });
@@ -526,7 +595,7 @@ $('#brief-draft').addEventListener('click', async () => {
     const meta = await api.json('/api/docs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort }),
+      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort, kind: briefKind || undefined }),
     });
     if (pendingAttachments.length) {
       btn.textContent = 'Uploading attachments…';

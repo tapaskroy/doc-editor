@@ -12,6 +12,7 @@ const exporter = require('./lib/export');
 const skills = require('./lib/skills');
 const attachments = require('./lib/attachments');
 const versions = require('./lib/versions');
+const mail = require('./lib/mail');
 
 // A short, single-line label for a revision snapshot from its request text.
 function shortLabel(request) {
@@ -331,6 +332,34 @@ app.post('/api/docs/:id/revise', async (req, res) => {
       history: meta.history,
       usage: meta.usage,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Mail (Phase 1: capability discovery + read ops) -------------------
+// Mail I/O is mediated by `claude -p` against the connected mail MCP; the app
+// adapts to discovered capabilities rather than assuming a provider.
+
+app.get('/api/mail/capabilities', async (req, res) => {
+  try {
+    res.json(await mail.capabilities({ refresh: req.query.refresh === '1' }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/mail/threads', async (req, res) => {
+  try {
+    res.json({ threads: await mail.searchThreads(req.query.q || '') });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/mail/threads/:id', async (req, res) => {
+  try {
+    res.json(await mail.readThread(req.params.id));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

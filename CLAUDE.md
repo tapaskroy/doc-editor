@@ -306,6 +306,27 @@ working flag set is `--headless=new --disable-gpu --no-first-run
 --no-default-browser-check --no-pdf-header-footer --print-to-pdf=…`. (And note
 `html-to-docx` was evaluated and rejected: its output won't open in MS Word.)
 
+## Mail (`lib/mail.js`)
+
+Mail I/O is mediated by `claude -p` against the connected mail MCP (the MCP is
+bound to the CLI, not Node). The engine is **provider-agnostic by dynamic
+capability discovery** — no hardcoded tool names. `capabilities()` runs a one-time
+classification turn → `{connected, server, tools:{searchThreads, readThread,
+listDrafts, createDraft, send}, canAttachToDraft}`; `searchThreads`/`readThread`
+run constrained turns that return structured JSON. Spec: `specs/mail-spec.md`,
+design: `design/mail-design.md`.
+
+> **Gotcha (load-bearing):** to use an MCP tool from `claude -p`, pre-approve it
+> with **`--allowedTools mcp__…`** but do **NOT** pass `--tools` to restrict — the
+> `--tools` allow-list *drops* MCP tools entirely (the model reports them "not
+> available"). `--tools` works for built-ins (Read/WebFetch); MCP tools must be
+> left unrestricted and merely pre-approved.
+
+> **Gotcha:** model-driven capability discovery is **non-deterministic** — it
+> occasionally returns an empty/unparseable descriptor. `capabilities()` retries
+> and **caches only a usable result**, so a transient miss never disables Mail.
+> (Gmail today: `send → null` (draft-only), `canAttachToDraft → false`.)
+
 ## Data model
 
 `docs/<id>.meta.json`:

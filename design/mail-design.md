@@ -102,6 +102,13 @@ Not per-provider adapters in code — **one `lib/mail.js` engine** that:
 
 Adding a provider = connecting its MCP. No new code path.
 
+> **Built & validated (Phase 1):** `lib/mail.js` implements `capabilities()`,
+> `searchThreads(query)`, `readThread(id)`, exposed at `GET /api/mail/capabilities`,
+> `/api/mail/threads?q=`, `/api/mail/threads/:id`. Verified end-to-end against the
+> live Gmail MCP. Two build findings: (a) MCP tools must be **pre-approved via
+> `--allowedTools`, never restricted via `--tools`** (the latter drops them); (b)
+> discovery is **non-deterministic** → retry + cache-only-a-usable-descriptor.
+
 ## 6. Data model & state ownership
 
 **Principle (decided): the mailbox is the source of truth for email content; the

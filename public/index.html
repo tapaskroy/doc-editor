@@ -10,6 +10,10 @@
   <body>
     <header class="topbar">
       <a class="brand" href="#/">✶ doc editor</a>
+      <nav class="surface-switch">
+        <a href="#/" id="nav-docs" class="active">Docs</a>
+        <a href="#/mail" id="nav-mail">Mail</a>
+      </nav>
       <span id="doc-title" class="doc-title"></span>
       <span id="save-state" class="save-state"></span>
       <span class="spacer"></span>
@@ -62,6 +66,29 @@
       </section>
     </main>
 
+    <!-- MAIL VIEW -->
+    <main id="view-mail" class="view hidden">
+      <div class="mail-grid">
+        <aside class="mail-rail">
+          <button id="mail-compose" class="primary">✎ Compose new</button>
+          <div class="mail-search">
+            <input id="mail-search-input" type="search" placeholder="Search a thread to reply…" />
+            <ul id="mail-results" class="mail-results"></ul>
+          </div>
+          <h3 class="mail-rail-h">Your emails</h3>
+          <ul id="mail-list" class="mail-list"></ul>
+          <p id="mail-status" class="hint"></p>
+        </aside>
+        <section class="mail-main">
+          <div id="mail-empty" class="mail-empty">
+            <h1>Mail</h1>
+            <p class="sub">Compose a new email, or search a thread on the left to reply. Refine it with the full writing surface, then save it to your mailbox drafts or send it, through whatever mail account you've connected.</p>
+            <p id="mail-cap" class="hint"></p>
+          </div>
+        </section>
+      </div>
+    </main>
+
     <!-- BRIEFING VIEW (the "let's talk about it first" intake) -->
     <main id="view-brief" class="view hidden">
       <section class="brief">
@@ -83,7 +110,19 @@
     <main id="view-editor" class="view hidden">
       <div class="editor-grid">
         <div class="doc-pane">
+          <div id="envelope" class="envelope hidden">
+            <div class="env-row"><label>To</label><input id="env-to" type="text" placeholder="recipient@example.com" /></div>
+            <div class="env-row"><label>Cc</label><input id="env-cc" type="text" placeholder="optional" /></div>
+            <div class="env-row"><label>Bcc</label><input id="env-bcc" type="text" placeholder="optional" /></div>
+            <div class="env-row env-subject"><label>Subject</label><span id="env-subject" class="env-subject-text" title="The subject is the email's first heading — edit it in the body">—</span></div>
+          </div>
           <article id="doc" class="doc"></article>
+          <div id="mail-foot" class="mail-foot hidden">
+            <span id="mail-identity" class="hint"></span>
+            <span class="spacer"></span>
+            <button id="save-draft-btn" class="ghost hidden">Save to Drafts</button>
+            <button id="send-btn" class="primary hidden">Send</button>
+          </div>
         </div>
 
         <aside class="sidebar">

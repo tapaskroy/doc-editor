@@ -110,6 +110,7 @@ function route() {
   const hash = location.hash || '#/';
   const m = hash.match(/^#\/doc\/(.+)$/);
   if (m) showEditor(m[1]);
+  else if (hash === '#/mail') showMail();
   else if (hash === '#/brief') showBrief();
   else showHome();
 }
@@ -123,8 +124,12 @@ window.addEventListener('beforeunload', () => {
 
 function show(view) {
   $('#view-home').classList.toggle('hidden', view !== 'home');
+  $('#view-mail').classList.toggle('hidden', view !== 'mail');
   $('#view-brief').classList.toggle('hidden', view !== 'brief');
   $('#view-editor').classList.toggle('hidden', view !== 'editor');
+  // Default the surface switch to the view; showEditor refines it for emails.
+  $('#nav-mail').classList.toggle('active', view === 'mail');
+  $('#nav-docs').classList.toggle('active', view !== 'mail');
 }
 
 // ---- home ---------------------------------------------------------------
@@ -183,6 +188,162 @@ $('#create-btn').addEventListener('click', async () => {
     $('#create-btn').textContent = 'Draft it →';
   }
 });
+
+// ---- mail ---------------------------------------------------------------
+
+// Discovered mail capabilities (cached for the session). Drives which actions
+// the UI shows — no hardcoded provider assumptions.
+let mailCaps = null;
+async function getMailCaps() {
+  if (mailCaps) return mailCaps;
+  mailCaps = await api.json('/api/mail/capabilities').catch(() => ({ connected: false, tools: {} }));
+  return mailCaps;
+}
+
+async function showMail() {
+  show('mail');
+  $('#doc-title').textContent = '';
+  setStatus('');
+  $('#mail-results').innerHTML = '';
+  $('#mail-search-input').value = '';
+
+  const cap = $('#mail-cap');
+  cap.textContent = 'Checking your connected mailbox…';
+  getMailCaps().then((c) => {
+    if (!c.connected) { cap.textContent = 'No mail account is connected. Connect a mail MCP to use Mail.'; return; }
+    const can = [];
+    if (c.tools.createDraft) can.push('save drafts');
+    if (c.tools.send) can.push('send');
+    cap.textContent = `Connected to ${c.server || 'your mailbox'}: you can ${can.join(' and ') || 'read mail'} from here.`;
+  });
+
+  const list = await api.json('/api/docs').catch(() => []);
+  const emails = list.filter((d) => d.kind === 'email');
+  const ul = $('#mail-list');
+  ul.innerHTML = emails.length ? '' : '<li class="empty hint">No emails yet — compose one above.</li>';
+  for (const d of emails) {
+    const li = document.createElement('li');
+    const status = (d.email && d.email.status) || 'composing';
+    li.innerHTML =
+      `<span class="subj">${escapeHtml(d.title || 'Untitled')}</span>` +
+      `<span class="meta"><span class="tag">${status}</span> · ${timeAgo(d.updatedAt)}</span>`;
+    li.addEventListener('click', () => { location.hash = `#/doc/${d.id}`; });
+    ul.appendChild(li);
+  }
+}
+
+// Create an email doc (optionally seeded with an envelope/context) and open it.
+async function composeEmail(init = {}) {
+  try {
+    const meta = await api.json('/api/docs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'email', premise: init.premise || '', email: init.email || {} }),
+    });
+    location.hash = `#/doc/${meta.id}`;
+  } catch (e) {
+    toast('Could not create email: ' + e.message);
+  }
+}
+
+$('#mail-compose').addEventListener('click', () => composeEmail());
+
+let mailSearchTimer = null;
+$('#mail-search-input').addEventListener('input', (e) => {
+  clearTimeout(mailSearchTimer);
+  const q = e.target.value.trim();
+  if (!q) { $('#mail-results').innerHTML = ''; return; }
+  mailSearchTimer = setTimeout(() => searchThreads(q), 450);
+});
+
+async function searchThreads(q) {
+  const ul = $('#mail-results');
+  ul.innerHTML = '<li class="hint">Searching…</li>';
+  try {
+    const { threads = [] } = await api.json('/api/mail/threads?q=' + encodeURIComponent(q));
+    ul.innerHTML = threads.length ? '' : '<li class="hint">No threads found.</li>';
+    for (const t of threads) {
+      const li = document.createElement('li');
+      li.innerHTML =
+        `<span class="subj">${escapeHtml(t.subject || '(no subject)')}</span>` +
+        `<span class="from">${escapeHtml(t.from || '')}</span>`;
+      li.addEventListener('click', () => replyToThread(t));
+      ul.appendChild(li);
+    }
+  } catch (e) {
+    ul.innerHTML = `<li class="hint">Search failed: ${escapeHtml(e.message)}</li>`;
+  }
+}
+
+// Reply = to the sender only (literal scope; never silently reply-all). The
+// thread is read transiently and handed over as drafting context.
+async function replyToThread(t) {
+  setStatus('Reading thread…');
+  try {
+    const thr = await api.json('/api/mail/threads/' + encodeURIComponent(t.id));
+    const msgs = thr.messages || [];
+    const last = msgs[msgs.length - 1] || {};
+    const quoted = msgs.map((m) => `From: ${m.from || ''}\nDate: ${m.date || ''}\n\n${m.body || ''}`).join('\n\n-----\n\n');
+    const subject = thr.subject ? `Re: ${thr.subject.replace(/^re:\s*/i, '')}` : '';
+    await composeEmail({
+      premise: 'Draft a reply to the sender of this email thread. Reply to the sender only (not reply-all), consistent with the conversation.',
+      email: {
+        envelope: { to: last.from ? [last.from] : [], subject, threadId: t.id },
+        replyScope: 'sender',
+        context: { text: `Thread being replied to:\n\n${quoted}` },
+      },
+    });
+  } catch (e) {
+    toast('Could not open thread: ' + e.message);
+  } finally {
+    setStatus('');
+  }
+}
+
+// Show/hide email chrome (envelope + capability footer) in the editor, and swap
+// the Export panel (docs) for mailbox commit actions (emails).
+async function applyMailChrome(data) {
+  const isEmail = data.kind === 'email';
+  $('#envelope').classList.toggle('hidden', !isEmail);
+  $('#mail-foot').classList.toggle('hidden', !isEmail);
+  const exportH = [...document.querySelectorAll('.panel h3')].find((h) => h.textContent.trim() === 'Export');
+  if (exportH) exportH.closest('.panel').classList.toggle('hidden', isEmail);
+  $('#nav-mail').classList.toggle('active', isEmail);
+  $('#nav-docs').classList.toggle('active', !isEmail);
+  if (!isEmail) return;
+
+  const env = (data.email && data.email.envelope) || {};
+  $('#env-to').value = (env.to || []).join(', ');
+  $('#env-cc').value = (env.cc || []).join(', ');
+  $('#env-bcc').value = (env.bcc || []).join(', ');
+  $('#env-subject').textContent = data.title || '—';
+
+  const caps = await getMailCaps();
+  const canDraft = !!(caps.tools && caps.tools.createDraft);
+  const canSend = !!(caps.tools && caps.tools.send);
+  $('#save-draft-btn').classList.toggle('hidden', !canDraft);
+  $('#send-btn').classList.toggle('hidden', !canSend);
+  $('#mail-identity').textContent = caps.connected
+    ? `Mailbox: ${caps.server || 'connected'}${canSend ? '' : ' · draft-only'}`
+    : 'No mailbox connected';
+}
+
+// Persist envelope edits (comma-separated → arrays).
+['to', 'cc', 'bcc'].forEach((f) => {
+  $('#env-' + f).addEventListener('change', () => {
+    if (!currentId) return;
+    const vals = $('#env-' + f).value.split(',').map((x) => x.trim()).filter(Boolean);
+    api.json(`/api/docs/${currentId}/email`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ envelope: { [f]: vals } }),
+    }).catch(() => {});
+  });
+});
+
+// Save to Drafts / Send — wired to the commit gate in the next phase.
+$('#save-draft-btn').addEventListener('click', () => toast('Save to Drafts arrives next — it goes through the review gate.'));
+$('#send-btn').addEventListener('click', () => toast('Send arrives with the review gate in the next phase.'));
 
 // ---- attachments --------------------------------------------------------
 
@@ -496,6 +657,7 @@ async function showEditor(id) {
   renderAttachments();
   renderCost(data.usage || []);
   renderVersions(data.versions || []);
+  applyMailChrome(data);
 
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.
@@ -558,7 +720,10 @@ async function doSave() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ markdown: htmlToMarkdown() }),
     });
-    if (res.title) $('#doc-title').textContent = res.title;
+    if (res.title) {
+      $('#doc-title').textContent = res.title;
+      if (!$('#envelope').classList.contains('hidden')) $('#env-subject').textContent = res.title;
+    }
     setSaveState('Saved');
     refreshVersions(); // reflect the (coalesced) manual-edit snapshot
     setTimeout(() => { if (!docDirty) setSaveState(''); }, 1500);

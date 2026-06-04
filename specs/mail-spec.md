@@ -52,11 +52,15 @@ planned for later; v1 leaves room for them but doesn't build them._
 
 ## 4. Surfaces
 
-A top-level **Docs | Mail** toggle. Mail is its own space.
+A top-level **Docs | Mail** toggle in the header. Mail is its own space.
+
+**Layout (decided):** two panes. A **left rail** holds **Compose new** and a
+**thread search box** whose results list below it; the **composer** fills the right
+pane. Footer actions are capability-gated.
 
 - **Compose new** — a blank composer.
-- **Reply** — a search box finds a thread; selecting it shows the messages
-  stacked, read-only; the primary action is **Draft reply**.
+- **Reply** — the rail's search box finds a thread; selecting it shows the messages
+  stacked, read-only, and the primary action is **Draft reply**.
 
 The **composer** is the doc-editor canvas (streamed draft, comment-revise, inline
 edit, voice, length) wrapped with:

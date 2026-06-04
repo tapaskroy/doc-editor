@@ -493,3 +493,35 @@ button {
   z-index: 60;
   max-width: 80vw;
 }
+
+/* ---- surface switch (Docs | Mail) ---- */
+.surface-switch { display: flex; gap: 2px; background: var(--accent-soft); border-radius: 999px; padding: 3px; margin-left: 6px; }
+.surface-switch a { font-size: 13px; padding: 4px 14px; border-radius: 999px; color: var(--muted); text-decoration: none; font-weight: 600; }
+.surface-switch a.active { background: var(--paper); color: var(--accent); box-shadow: var(--shadow); }
+
+/* ---- mail space (two-pane: rail + main) ---- */
+#view-mail { overflow: hidden; }
+.mail-grid { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
+.mail-rail { border-right: 1px solid var(--line); padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; background: var(--paper); }
+.mail-rail-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 8px 0 0; }
+.mail-search input { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: var(--bg); }
+.mail-results, .mail-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.mail-results li, .mail-list li { padding: 9px 11px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
+.mail-results li:hover, .mail-list li:hover { background: var(--accent-soft); }
+.mail-results .subj, .mail-list .subj { font-weight: 600; font-size: 14px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-results .from, .mail-list .meta { font-size: 12px; color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-list .tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.mail-main { overflow-y: auto; padding: 60px 40px; }
+.mail-empty { max-width: 560px; margin: 0 auto; }
+.mail-empty h1 { font-size: 28px; }
+
+/* ---- email chrome in the editor (envelope + capability footer) ---- */
+.envelope { width: 8.5in; max-width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 18px; margin: 0 auto 14px; box-shadow: var(--shadow); }
+.env-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.env-row:last-child { border-bottom: none; }
+.env-row label { width: 56px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); flex: none; }
+.env-row input { flex: 1; border: none; background: none; font: inherit; padding: 2px 0; color: var(--ink); }
+.env-row input:focus { outline: none; }
+.env-subject-text { font-weight: 600; }
+.mail-foot { width: 8.5in; max-width: 100%; margin: 14px auto 28px; display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.mail-foot .spacer { flex: 1; }

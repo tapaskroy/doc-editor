@@ -146,6 +146,13 @@ app.get('/api/docs/:id/versions/:vid', (req, res) => {
   res.json({ vid: v.vid, label: v.label, at: v.at, markdown: v.markdown });
 });
 
+// What this snapshot changed: its Markdown paired with the previous snapshot's.
+app.get('/api/docs/:id/versions/:vid/diff', (req, res) => {
+  const pair = versions.diffPair(req.params.id, req.params.vid);
+  if (!pair) return res.status(404).json({ error: 'version not found' });
+  res.json(pair);
+});
+
 // Restore a snapshot (non-destructive: records a new "Restored" snapshot).
 app.post('/api/docs/:id/versions/:vid/restore', (req, res) => {
   const { id, vid } = req.params;

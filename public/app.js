@@ -640,8 +640,10 @@ async function openDiff(v) {
   $('#diff-body').innerHTML = '<span class="none">Loading…</span>';
   $('#diff-modal').classList.remove('hidden');
   try {
-    const ver = await api.json(`/api/docs/${currentId}/versions/${v.vid}`);
-    renderDiff(ver.markdown || '', td ? htmlToMarkdown() : '');
+    // Show what THIS snapshot changed: it vs the snapshot before it (both stored
+    // Markdown — same lineage, so no turndown re-serialization noise).
+    const { before, after } = await api.json(`/api/docs/${currentId}/versions/${v.vid}/diff`);
+    renderDiff(before || '', after || '');
   } catch (e) {
     $('#diff-body').innerHTML = `<span class="none">Could not load: ${escapeHtml(e.message)}</span>`;
   }

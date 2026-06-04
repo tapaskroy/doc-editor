@@ -50,6 +50,20 @@ test('an AI snapshot between manual edits prevents coalescing', () => {
   assert.equal(versions.list(DOC).length, 3);
 });
 
+test('diffPair() returns a snapshot paired with the one before it', () => {
+  versions.add(DOC, { label: 'Draft', kind: 'ai', markdown: 'line1\nline2' });
+  versions.add(DOC, { label: 'Revision', kind: 'ai', markdown: 'line1\nline2\nline3' });
+  const list = versions.list(DOC); // newest first
+  const rev = versions.diffPair(DOC, list[0].vid);
+  assert.equal(rev.before, 'line1\nline2'); // the parent
+  assert.equal(rev.after, 'line1\nline2\nline3'); // this snapshot
+  // first version has no parent -> before is ''
+  const draft = versions.diffPair(DOC, list[1].vid);
+  assert.equal(draft.before, '');
+  assert.equal(draft.after, 'line1\nline2');
+  assert.equal(versions.diffPair(DOC, 'nope'), null);
+});
+
 test('previous() returns the snapshot before the head (for single-step undo)', () => {
   assert.equal(versions.previous(DOC), null); // none yet
   versions.add(DOC, { label: 'Draft', kind: 'ai', markdown: 'one' });

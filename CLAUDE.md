@@ -183,9 +183,13 @@ mutation sites: generation `onDone` ("Draft"/"Regenerated"), the revise route
   `GET …/versions/:vid` (full markdown for the diff), `POST …/versions/:vid/restore`,
   `POST …/undo`. The doc GET also embeds the version list for first paint.
 - **Client**: the Versions panel; clicking a snapshot opens a modal with a
-  client-side line diff (`lineDiff`, LCS, no dependency) of that snapshot →
-  current; Restore/Undo re-render via `renderDoc` and refresh the list. Undo is
-  its **own button** (single-step) — ⌘Z stays for in-progress typing.
+  client-side line diff (`lineDiff`, LCS, no dependency) showing **what that
+  snapshot changed** — it vs its parent snapshot (`GET …/versions/:vid/diff`
+  returns `{before, after}`). Both sides are stored Markdown of the same lineage,
+  so AI revisions (find/replace splices) diff cleanly with no turndown noise.
+  Diffing against the live turndown-of-HTML would show spurious changes — don't.
+  Restore/Undo re-render via `renderDoc` and refresh the list. Undo is its **own
+  button** (single-step) — ⌘Z stays for in-progress typing.
 
 ## Inline editing (WYSIWYG → Markdown autosave)
 

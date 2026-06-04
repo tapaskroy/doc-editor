@@ -405,6 +405,14 @@ app.get('/api/mail/threads', async (req, res) => {
   }
 });
 
+app.get('/api/mail/inbox', async (req, res) => {
+  try {
+    res.json({ threads: await mail.inbox({ limit: 10 }) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/mail/threads/:id', async (req, res) => {
   try {
     res.json(await mail.readThread(req.params.id));

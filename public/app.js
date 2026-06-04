@@ -217,6 +217,8 @@ async function showMail() {
     cap.textContent = `Connected to ${c.server || 'your mailbox'}: you can ${can.join(' and ') || 'read mail'} from here.`;
   });
 
+  loadInbox(); // async, non-blocking — the rail and composer stay usable while it loads
+
   const list = await api.json('/api/docs').catch(() => []);
   const emails = list.filter((d) => d.kind === 'email');
   const ul = $('#mail-list');
@@ -250,6 +252,34 @@ async function showMail() {
     ul.appendChild(li);
   }
 }
+
+// Recent Primary inbox threads (cached for the session — the call is slow).
+let mailInboxCache = null;
+async function loadInbox(force = false) {
+  const ul = $('#mail-inbox');
+  if (mailInboxCache && !force) return renderInbox(mailInboxCache);
+  ul.innerHTML = '<li class="hint">Loading recent mail…</li>';
+  try {
+    const { threads = [] } = await api.json('/api/mail/inbox');
+    mailInboxCache = threads;
+    renderInbox(threads);
+  } catch (e) {
+    ul.innerHTML = `<li class="hint">Could not load inbox: ${escapeHtml(e.message)}</li>`;
+  }
+}
+function renderInbox(threads) {
+  const ul = $('#mail-inbox');
+  ul.innerHTML = threads.length ? '' : '<li class="hint">No recent Primary mail.</li>';
+  for (const t of threads) {
+    const li = document.createElement('li');
+    li.innerHTML =
+      `<span class="subj">${escapeHtml(t.subject || '(no subject)')}</span>` +
+      `<span class="from">${escapeHtml(t.from || '')}</span>`;
+    li.addEventListener('click', () => replyToThread(t));
+    ul.appendChild(li);
+  }
+}
+$('#mail-inbox-refresh').addEventListener('click', () => loadInbox(true));
 
 // Create an email doc (optionally seeded with an envelope/context) and open it.
 async function composeEmail(init = {}) {

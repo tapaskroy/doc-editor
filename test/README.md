@@ -17,7 +17,8 @@ logic:
 - `unit/attachments.test.js` — attachment classify/store/remove and the prompt `referenceBlock` (fixture dir via `DOC_EDITOR_ASSETS_DIR`).
 - `unit/export-media.test.js` — `buildHtml` inlining `/media` images as data URIs for portable HTML/PDF.
 - `unit/usage.test.js` — `extractUsage`/`sumUsage` (normalizing + combining the CLI's token/cost fields); `docs.addUsage` is covered in `docs.test.js`.
-- `unit/versions.test.js` — version store: append, newest-first list, get, manual-edit coalescing, and `previous()` for single-step undo (fixture dir via `DOC_EDITOR_VERSIONS_DIR`).
+- `unit/versions.test.js` — version store: append, newest-first list, get, manual-edit coalescing, `previous()` for undo, and `diffPair()` (a snapshot paired with its parent — guards the diff-against-parent semantics).
+- `unit/linediff.test.js` — the LCS line diff (`public/linediff.js`, shared with the browser). Includes the regression guard: an add-only edit yields only additions with every original line preserved (the bug where diffs were noisy).
 
 These run in well under a second and are safe to run anywhere.
 

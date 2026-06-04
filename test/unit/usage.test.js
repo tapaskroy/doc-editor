@@ -23,6 +23,20 @@ test('extractUsage tolerates missing fields', () => {
   assert.deepEqual(u, { model: null, usd: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0 });
 });
 
+// Regression: an Opus job's modelUsage also lists a tiny auxiliary Haiku call,
+// with Haiku FIRST. We must report the dominant (by cost) model, not the first.
+test('extractUsage picks the dominant model when multiple are listed', () => {
+  const u = extractUsage({
+    total_cost_usd: 0.0227,
+    usage: { input_tokens: 2, output_tokens: 32, cache_creation_input_tokens: 3413 },
+    modelUsage: {
+      'claude-haiku-4-5-20251001': { costUSD: 0.0005, outputTokens: 14 }, // auxiliary, listed first
+      'claude-opus-4-8': { costUSD: 0.0221, outputTokens: 32 }, // the real generation
+    },
+  });
+  assert.equal(u.model, 'claude-opus-4-8'); // NOT haiku
+});
+
 test('sumUsage adds token + cost fields and keeps the latest model', () => {
   const a = { model: 'opus', usd: 0.01, input: 5, output: 10, cacheRead: 1, cacheCreation: 2 };
   const b = { model: 'sonnet', usd: 0.02, input: 3, output: 4, cacheRead: 0, cacheCreation: 7 };

@@ -127,6 +127,12 @@ both token `usage` and `total_cost_usd` on every call (stream `result` event and
 the json envelope); `claude.extractUsage()` normalizes either shape and
 `sumUsage()` combines multi-attempt calls (e.g. revise's retry).
 
+> **Gotcha (load-bearing):** `result.modelUsage` can list MORE than one model —
+> Claude Code makes a tiny **Haiku side-call alongside the main model on every
+> generation**. `extractUsage` must pick the **dominant model by cost**
+> (`primaryModel`), NOT the first key. Taking the first key mislabeled every Opus
+> job as Haiku and fired a false "downgrade" warning.
+
 - Ops recorded: `draft` / `regenerate` (generate), `revise` (also length-adjust),
   `briefing` (interview turns — accumulated client-side and submitted on doc
   create, since they predate the doc), `brief` (compileBrief), `export-pptx`

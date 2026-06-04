@@ -29,6 +29,10 @@ Browser (:9999)  ──HTTP/SSE──►  Node server  ──spawn──►  cla
   converted back to Markdown via `turndown`); no Claude call, no cost. Selecting
   text to comment still works while editing. (Prose round-trips cleanly; heavy
   tables are the rough edge.)
+- **Version history + undo**: every change (draft, each revision, length adjust,
+  inline-edit bursts) is snapshotted. A **Versions** panel lists them; click one
+  to see a **diff** vs the current document and **restore** it (restoring is
+  non-destructive). A one-click **Undo** reverts the last change.
 - **Conversation memory**: each document keeps an ordered history of your
   requests (the premise, then every revision), fed back as context on each
   revision — so Claude remembers earlier intent, including facts stated only in
@@ -92,6 +96,7 @@ The smoke test needs the `claude` CLI, Google Chrome, and `playwright-core`
 - `lib/docs.js` — Markdown + metadata persistence
 - `lib/skills.js` — discovers voice/style skills (`~/.claude/skills`, `.claude/skills`)
 - `lib/attachments.js` — uploaded reference files under `docs-assets/` (+ pandoc text conversion)
+- `lib/versions.js` — per-doc version snapshots under `docs-versions/` (diff/restore/undo)
 - `lib/export.js` — export to HTML/PDF/docx/pptx (marked + Chrome + pandoc + pptxgenjs)
 - `public/` — the single-page app (no build step)
 - `test/` — unit tests (`test/unit/`) + opt-in smoke test (`test/smoke.js`)

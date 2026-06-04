@@ -41,6 +41,7 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
 | `lib/docs.js` | Disk persistence. One document = `docs/<id>.md` (body) + `docs/<id>.meta.json` (metadata). No database. |
 | `lib/skills.js` | Discovers voice/style "skills" (`~/.claude/skills`, project `.claude/skills`) — `list()` for browsing, `read(id)` for the chosen SKILL.md body. |
 | `lib/attachments.js` | Per-doc uploaded reference files under `docs-assets/<docId>/`. Stores bytes, converts office docs to Markdown (pandoc), builds the prompt reference block. |
+| `lib/versions.js` | Per-doc version snapshots under `docs-versions/<id>.json` (full Markdown each). `add` (coalesces manual bursts), `list`, `get`, `previous` (for undo). |
 | `lib/export.js` | Export to HTML / PDF / docx / pptx. HTML is pure `marked`; PDF shells out to Chrome; docx to pandoc; pptx is a Claude deck-builder + `pptxgenjs`. |
 | `public/index.html` | Single-page app shell: home (composer + library) and editor views. |
 | `public/app.js` | All client logic: hash routing, streaming render, text-selection comments, revision, the model/effort/web picker, and the conversation panel. |
@@ -163,6 +164,28 @@ Notes:
 - Style is a global picker (localStorage `de.skill`), like model/effort/web —
   sent per request, not stored on the doc. Applies to drafting (incl. briefing)
   and revisions; not to the interview/brief/deck steps.
+
+## Version history + undo
+
+Every change snapshots the full Markdown to `lib/versions.js` (separate per-doc
+file, so it never bloats `meta.json`). Snapshots are taken server-side at the
+mutation sites: generation `onDone` ("Draft"/"Regenerated"), the revise route
+("Revision: …"), and the inline-content PUT ("Manual edit").
+
+- **Coalescing**: consecutive `manual` snapshots within `COALESCE_MS` (3 min)
+  update the latest in place rather than piling up — so a typing burst is one
+  snapshot, not one per autosave. An AI snapshot in between breaks the run.
+- **Invariant**: the head snapshot always equals the current document, so
+  single-step undo = restore `versions.previous()` (the one before head). Undo
+  and restore both *append* a snapshot ("Undo" / "Restored: …") — never
+  destructive, so nothing is lost (you can re-restore from the panel).
+- **Endpoints**: `GET …/versions` (metadata, newest-first, no markdown),
+  `GET …/versions/:vid` (full markdown for the diff), `POST …/versions/:vid/restore`,
+  `POST …/undo`. The doc GET also embeds the version list for first paint.
+- **Client**: the Versions panel; clicking a snapshot opens a modal with a
+  client-side line diff (`lineDiff`, LCS, no dependency) of that snapshot →
+  current; Restore/Undo re-render via `renderDoc` and refresh the list. Undo is
+  its **own button** (single-step) — ⌘Z stays for in-progress typing.
 
 ## Inline editing (WYSIWYG → Markdown autosave)
 
@@ -321,10 +344,9 @@ never touch the real `docs/`.
 
 ## Ideas / not yet built
 
-Per-comment "apply individually", and true document-level version history /
-undo (would require snapshotting the Markdown per revision — pruning history
-today does **not** roll back the doc; native ⌘Z covers in-progress inline typing
-only).
+Per-comment "apply individually" (accept/reject a single AI edit before it
+lands). Multi-level undo + redo (today's Undo is single-step; the Versions panel
+covers deeper rollbacks via restore).
 
 A richer **presentation** path: let the user bring their own slide skills /
 templates, formatting conventions, and images so pptx export produces a polished,

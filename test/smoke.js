@@ -113,6 +113,11 @@ async function waitForServer(timeoutMs = 15000) {
     assert(/Edited-inline\./.test(await page.locator('#doc').textContent()), 'inline edit should be present');
     log('inline edit autosaved');
 
+    // 3c) Version history: the edit produced a second snapshot and enabled Undo.
+    await page.waitForFunction(() => document.querySelectorAll('#versions li').length >= 2, null, { timeout: 6000 });
+    assert(!(await page.locator('#undo-btn').isDisabled()), 'undo should be enabled with >1 version');
+    log('version snapshots recorded (' + (await page.locator('#versions li').count()) + ')');
+
     // 4) Conversation panel shows the premise.
     await page.click('#hist-toggle');
     const histCount = await page.textContent('#hist-count');

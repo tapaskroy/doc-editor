@@ -105,6 +105,15 @@
 
           <div class="panel">
             <h3>
+              Versions <span id="ver-count" class="count">0</span>
+              <button id="undo-btn" class="mini" title="Undo the last change" disabled>↶ Undo</button>
+            </h3>
+            <p class="hint">Snapshots of every change. Click one to see what changed and restore it.</p>
+            <ul id="versions" class="versions"></ul>
+          </div>
+
+          <div class="panel">
+            <h3>
               Conversation <span id="hist-count" class="count">0</span>
               <button id="hist-toggle" class="mini" aria-expanded="false">show</button>
             </h3>
@@ -154,6 +163,21 @@
     <!-- Floating selection popover -->
     <div id="sel-popover" class="sel-popover hidden">
       <button id="sel-comment-btn">💬 Comment</button>
+    </div>
+
+    <!-- Version diff modal -->
+    <div id="diff-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="diff-title"></strong>
+          <button id="diff-close" class="ghost">Close</button>
+        </div>
+        <pre id="diff-body" class="diff"></pre>
+        <div class="modal-foot">
+          <span class="hint">this version → current document</span>
+          <button id="diff-restore" class="primary">Restore this version</button>
+        </div>
+      </div>
     </div>
 
     <div id="toast" class="toast hidden"></div>

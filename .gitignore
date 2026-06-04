@@ -3,3 +3,4 @@ docs/*.md
 docs/*.meta.json
 !docs/.gitkeep
 docs-assets/
+docs-versions/

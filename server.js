@@ -11,6 +11,13 @@ const claude = require('./lib/claude');
 const exporter = require('./lib/export');
 const skills = require('./lib/skills');
 const attachments = require('./lib/attachments');
+const versions = require('./lib/versions');
+
+// A short, single-line label for a revision snapshot from its request text.
+function shortLabel(request) {
+  const s = String(request || '').replace(/\s+/g, ' ').replace(/^Global instruction:\s*/, '').trim();
+  return s.length > 60 ? s.slice(0, 57) + '…' : s || 'edit';
+}
 
 const PORT = process.env.PORT || 9999;
 const app = express();
@@ -104,6 +111,7 @@ function saveContent(req, res) {
   const { markdown } = req.body || {};
   if (typeof markdown !== 'string') return res.status(400).json({ error: 'markdown (string) required' });
   const meta = docs.setMarkdown(id, markdown);
+  versions.add(id, { label: 'Manual edit', kind: 'manual', markdown }); // coalesced per burst
   res.json({ title: meta.title, updatedAt: meta.updatedAt });
 }
 app.put('/api/docs/:id/content', saveContent);
@@ -114,13 +122,50 @@ app.get('/api/docs/:id', (req, res) => {
   const doc = docs.get(req.params.id);
   // Don't expose server-only absolute paths to the browser.
   const safeAttachments = (doc.attachments || []).map(({ refPath, ...a }) => a);
-  res.json({ ...doc, attachments: safeAttachments, html: render(doc.markdown) });
+  res.json({ ...doc, attachments: safeAttachments, html: render(doc.markdown), versions: versions.list(req.params.id) });
 });
 
 app.delete('/api/docs/:id', (req, res) => {
   attachments.removeAll(req.params.id); // also drop its uploaded files
+  versions.remove(req.params.id); // and its version history
   docs.remove(req.params.id);
   res.json({ ok: true });
+});
+
+// --- Version history -----------------------------------------------------
+
+app.get('/api/docs/:id/versions', (req, res) => {
+  if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
+  res.json({ versions: versions.list(req.params.id) });
+});
+
+// Full Markdown of one snapshot (for the diff / preview).
+app.get('/api/docs/:id/versions/:vid', (req, res) => {
+  const v = versions.get(req.params.id, req.params.vid);
+  if (!v) return res.status(404).json({ error: 'version not found' });
+  res.json({ vid: v.vid, label: v.label, at: v.at, markdown: v.markdown });
+});
+
+// Restore a snapshot (non-destructive: records a new "Restored" snapshot).
+app.post('/api/docs/:id/versions/:vid/restore', (req, res) => {
+  const { id, vid } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const v = versions.get(id, vid);
+  if (!v) return res.status(404).json({ error: 'version not found' });
+  const meta = docs.setMarkdown(id, v.markdown);
+  const list = versions.add(id, { label: `Restored: ${v.label}`, kind: 'restore', markdown: v.markdown });
+  res.json({ markdown: v.markdown, html: render(v.markdown), title: meta.title, versions: list });
+});
+
+// Single-step undo: revert to the snapshot just before the current head.
+app.post('/api/docs/:id/undo', (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const prev = versions.previous(id);
+  if (!prev) return res.status(400).json({ error: 'nothing to undo' });
+  const meta = docs.setMarkdown(id, prev.markdown);
+  const list = versions.add(id, { label: 'Undo', kind: 'restore', markdown: prev.markdown });
+  res.json({ markdown: prev.markdown, html: render(prev.markdown), title: meta.title, versions: list });
 });
 
 // --- Attachments (reference pictures / documents for a doc) --------------
@@ -193,6 +238,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     onDone: (markdown, usage) => {
       docs.setMarkdown(id, markdown);
       const meta = docs.addUsage(id, { op, requested: model || '', ...usage });
+      versions.add(id, { label: op === 'draft' ? 'Draft' : 'Regenerated', kind: 'ai', model: usage.model, usd: usage.usd, markdown });
       send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history, usage: meta.usage });
       res.end();
     },
@@ -263,6 +309,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);
     const meta = docs.addUsage(id, { op: 'revise', requested: model || '', ...usage });
+    versions.add(id, { label: `Revision: ${shortLabel(request)}`, kind: 'ai', model: usage.model, usd: usage.usd, markdown: updated });
     res.json({
       markdown: updated,
       html: render(updated),

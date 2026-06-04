@@ -17,6 +17,7 @@ logic:
 - `unit/attachments.test.js` — attachment classify/store/remove and the prompt `referenceBlock` (fixture dir via `DOC_EDITOR_ASSETS_DIR`).
 - `unit/export-media.test.js` — `buildHtml` inlining `/media` images as data URIs for portable HTML/PDF.
 - `unit/usage.test.js` — `extractUsage`/`sumUsage` (normalizing + combining the CLI's token/cost fields); `docs.addUsage` is covered in `docs.test.js`.
+- `unit/versions.test.js` — version store: append, newest-first list, get, manual-edit coalescing, and `previous()` for single-step undo (fixture dir via `DOC_EDITOR_VERSIONS_DIR`).
 
 These run in well under a second and are safe to run anywhere.
 

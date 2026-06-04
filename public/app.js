@@ -495,6 +495,7 @@ async function showEditor(id) {
   renderHistory();
   renderAttachments();
   renderCost(data.usage || []);
+  renderVersions(data.versions || []);
 
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.
@@ -559,6 +560,7 @@ async function doSave() {
     });
     if (res.title) $('#doc-title').textContent = res.title;
     setSaveState('Saved');
+    refreshVersions(); // reflect the (coalesced) manual-edit snapshot
     setTimeout(() => { if (!docDirty) setSaveState(''); }, 1500);
   } catch (e) {
     docDirty = true; // allow a retry on the next edit
@@ -580,6 +582,136 @@ $('#doc').addEventListener('input', () => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(doSave, 1000);
 });
+
+// ---- version history + undo --------------------------------------------
+
+let currentVersions = [];
+
+function renderVersions(list) {
+  if (list) currentVersions = list;
+  $('#ver-count').textContent = currentVersions.length;
+  $('#undo-btn').disabled = currentVersions.length < 2;
+  const ul = $('#versions');
+  ul.innerHTML = '';
+  currentVersions.forEach((v, i) => {
+    const li = document.createElement('li');
+    li.className = 'kind-' + (v.kind || 'ai') + (i === 0 ? ' head' : '');
+    li.innerHTML =
+      `<span class="v-label"><span class="v-dot">●</span> ${escapeHtml(v.label)}</span>` +
+      `<span class="v-time">${timeAgo(v.at)}</span>`;
+    li.addEventListener('click', () => openDiff(v));
+    ul.appendChild(li);
+  });
+}
+
+async function refreshVersions() {
+  if (!currentId) return;
+  try {
+    const { versions } = await api.json(`/api/docs/${currentId}/versions`);
+    renderVersions(versions);
+  } catch {
+    /* non-fatal */
+  }
+}
+
+$('#undo-btn').addEventListener('click', async () => {
+  if (!currentId || currentVersions.length < 2) return;
+  $('#undo-btn').disabled = true;
+  try {
+    await flushSave(); // ensure the change being undone is actually the latest
+    const res = await api.json(`/api/docs/${currentId}/undo`, { method: 'POST' });
+    renderDoc(res.html, true);
+    $('#doc-title').textContent = res.title || 'Untitled';
+    renderVersions(res.versions);
+    updateLength(res.markdown);
+    toast('Undid last change');
+  } catch (e) {
+    toast('Undo failed: ' + e.message);
+    $('#undo-btn').disabled = false;
+  }
+});
+
+// --- diff modal ---
+let diffVid = null;
+
+async function openDiff(v) {
+  diffVid = v.vid;
+  $('#diff-title').textContent = `${v.label} · ${timeAgo(v.at)}`;
+  $('#diff-body').innerHTML = '<span class="none">Loading…</span>';
+  $('#diff-modal').classList.remove('hidden');
+  try {
+    const ver = await api.json(`/api/docs/${currentId}/versions/${v.vid}`);
+    renderDiff(ver.markdown || '', td ? htmlToMarkdown() : '');
+  } catch (e) {
+    $('#diff-body').innerHTML = `<span class="none">Could not load: ${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function closeDiff() {
+  $('#diff-modal').classList.add('hidden');
+  diffVid = null;
+}
+$('#diff-close').addEventListener('click', closeDiff);
+$('#diff-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'diff-modal') closeDiff();
+});
+
+$('#diff-restore').addEventListener('click', async () => {
+  if (!diffVid) return;
+  $('#diff-restore').disabled = true;
+  try {
+    await flushSave(); // snapshot the current state before replacing it
+    const res = await api.json(`/api/docs/${currentId}/versions/${diffVid}/restore`, { method: 'POST' });
+    renderDoc(res.html, true);
+    $('#doc-title').textContent = res.title || 'Untitled';
+    renderVersions(res.versions);
+    updateLength(res.markdown);
+    closeDiff();
+    toast('Restored version');
+  } catch (e) {
+    toast('Restore failed: ' + e.message);
+  } finally {
+    $('#diff-restore').disabled = false;
+  }
+});
+
+function renderDiff(oldText, newText) {
+  const rows = lineDiff(oldText, newText);
+  if (!rows.some((r) => r.t !== 'same')) {
+    $('#diff-body').innerHTML = '<span class="none">No differences — this version matches the current document.</span>';
+    return;
+  }
+  $('#diff-body').innerHTML = rows
+    .map((r) => {
+      const cls = r.t === 'add' ? 'add' : r.t === 'del' ? 'del' : 'same';
+      const pfx = r.t === 'add' ? '+ ' : r.t === 'del' ? '- ' : '  ';
+      return `<span class="${cls}">${escapeHtml(pfx + r.s) || '&nbsp;'}</span>`;
+    })
+    .join('');
+}
+
+// Line-level LCS diff → [{ t: 'same'|'add'|'del', s }].
+function lineDiff(oldText, newText) {
+  const a = String(oldText).split('\n');
+  const b = String(newText).split('\n');
+  const n = a.length;
+  const m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ t: 'same', s: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: 'del', s: a[i] }); i++; }
+    else { out.push({ t: 'add', s: b[j] }); j++; }
+  }
+  while (i < n) out.push({ t: 'del', s: a[i++] });
+  while (j < m) out.push({ t: 'add', s: b[j++] });
+  return out;
+}
 
 // ---- length readout + target adjustment --------------------------------
 
@@ -720,6 +852,7 @@ async function adjustLength(target, over) {
     }
     updateLength(res.markdown);
     if (res.usage) renderCost(res.usage);
+    refreshVersions();
     toast('Adjusted length.');
   } catch (e) {
     toast('Could not adjust: ' + e.message);
@@ -778,6 +911,7 @@ function startGeneration(id) {
     }
     updateLength(d.markdown);
     if (d.usage) renderCost(d.usage);
+    refreshVersions();
     setStatus('');
     $('#revise-btn').disabled = comments.length === 0 && !$('#instruction').value.trim();
     es.close();
@@ -968,6 +1102,7 @@ $('#revise-btn').addEventListener('click', async () => {
     }
     updateLength(res.markdown);
     if (res.usage) renderCost(res.usage);
+    refreshVersions();
 
     const ok = res.applied.filter((a) => a.ok).length;
     const failed = res.applied.filter((a) => !a.ok);

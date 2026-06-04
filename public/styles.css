@@ -154,6 +154,35 @@ button {
 .brief-cancel { color: var(--muted); font-size: 14px; text-decoration: none; }
 .brief-cancel:hover { color: var(--accent); }
 
+/* Versions panel */
+.versions { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; max-height: 240px; overflow: auto; }
+.versions li {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 12.5px;
+  border: 1px solid transparent;
+}
+.versions li:hover { background: var(--accent-soft); border-color: var(--line); }
+.versions .v-label { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.versions li.head .v-label { font-weight: 600; }
+.versions li.kind-ai .v-dot { color: var(--accent); }
+.versions li.kind-manual .v-dot { color: #4a7; }
+.versions li.kind-restore .v-dot { color: var(--muted); }
+.versions .v-time { color: var(--muted); font-size: 11px; white-space: nowrap; }
+#undo-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Modal + diff */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 70; }
+.modal-card { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); width: min(820px, 92vw); max-height: 86vh; display: flex; flex-direction: column; }
+.modal-head, .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; }
+.modal-head { border-bottom: 1px solid var(--line); }
+.modal-foot { border-top: 1px solid var(--line); }
+.diff { margin: 0; padding: 14px 18px; overflow: auto; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; line-height: 1.5; }
+.diff span { display: block; white-space: pre-wrap; word-break: break-word; }
+.diff .same { color: var(--muted); }
+.diff .add { background: #e3f5e0; color: #1d6b2a; }
+.diff .del { background: #fbe4e0; color: #9d2a1a; }
+.diff .none { color: var(--muted); font-style: italic; }
+
 /* Cost panel (editor) */
 .cost-headline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 #cost-usd { font-size: 20px; font-weight: 650; color: var(--ink); letter-spacing: -0.01em; }

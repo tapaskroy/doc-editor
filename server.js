@@ -73,8 +73,8 @@ app.get('/api/skills', (req, res) => {
 });
 
 app.post('/api/docs', async (req, res) => {
-  const { premise = '', intake, intakeUsage, model, effort } = req.body || {};
-  let meta = docs.create(premise);
+  const { premise = '', intake, intakeUsage, model, effort, kind, email } = req.body || {};
+  let meta = docs.create(premise, { kind, email });
   // Carry over the cost of the briefing interview turns (run before the doc existed).
   if (Array.isArray(intakeUsage) && intakeUsage.length) {
     meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', requested: model || '', ...u })));
@@ -220,14 +220,26 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
 app.get('/api/docs/:id/generate', (req, res) => {
   const { id } = req.params;
   if (!docs.exists(id)) return res.status(404).end();
-  const { premise, brief, attachments: atts = [] } = docs.readMeta(id);
+  const { premise, brief, attachments: atts = [], kind, email } = docs.readMeta(id);
   const { model, effort } = req.query;
-  const web = req.query.web === 'true';
+  let web = req.query.web === 'true';
   const style = req.query.skill ? skills.read(req.query.skill) : null;
   const references = attachments.referenceBlock(id, atts);
   const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
   // A briefed doc generates from its structured brief; otherwise from the premise.
-  const genPrompt = brief ? claude.briefToPrompt(brief) : premise;
+  let genPrompt = brief ? claude.briefToPrompt(brief) : premise;
+
+  // Email: fold the "provide more context" bundle (free text + links) into the
+  // prompt. Links need web reading, so enable it when any are present.
+  if (kind === 'email' && email) {
+    const blocks = [];
+    if (email.context?.text?.trim()) blocks.push(`----- CONTEXT -----\n${email.context.text.trim()}`);
+    if (Array.isArray(email.context?.links) && email.context.links.length) {
+      blocks.push(`----- LINKS (read these for context) -----\n${email.context.links.join('\n')}`);
+      web = true;
+    }
+    if (blocks.length) genPrompt = `${blocks.join('\n\n')}\n\n----- REQUEST -----\n${genPrompt}`;
+  }
   // Start the conversation fresh for this (re)generation; the premise is turn 1.
   docs.setHistory(id, [{ role: 'user', content: premise }]);
 
@@ -246,6 +258,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     web,
     style,
     references,
+    kind,
     addDir: references ? attachments.docDir(id) : null,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),

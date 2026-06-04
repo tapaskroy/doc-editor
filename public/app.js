@@ -265,12 +265,6 @@ async function composeEmail(init = {}) {
   }
 }
 
-// Rail "Compose new" resets the composer in the right pane.
-$('#mail-compose').addEventListener('click', () => {
-  $('#mail-premise').value = '';
-  $('#mail-premise').focus();
-});
-
 // Draft it → create the email and stream the first draft (mirrors the home flow).
 $('#mail-draft').addEventListener('click', async () => {
   const premise = $('#mail-premise').value.trim();

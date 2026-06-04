@@ -87,21 +87,37 @@
         </div>
 
         <aside class="sidebar">
-          <div id="cost-panel" class="panel cost-panel hidden">
-            <h3>Cost <button id="cost-toggle" class="mini" aria-expanded="false">details</button></h3>
-            <div class="cost-headline">
-              <span id="cost-usd">$0.000</span>
-              <span class="cost-sub">API-equivalent · <span id="cost-tokens">0</span> tokens</span>
-            </div>
-            <div id="cost-warn" class="cost-warn hidden"></div>
-            <ul id="cost-breakdown" class="cost-breakdown hidden"></ul>
+          <div class="panel">
+            <h3>Comments <span id="comment-count" class="count">0</span></h3>
+            <p class="hint" id="comments-hint">Select text in the document to attach a comment.</p>
+            <ul id="comments" class="comments"></ul>
           </div>
 
-          <div id="length-panel" class="panel length-panel hidden">
-            <div class="length-stat"><span id="length-readout">—</span></div>
-            <div id="length-target" class="length-target hidden">
-              <span id="length-target-text"></span>
-              <button id="length-adjust" class="mini"></button>
+          <div class="panel">
+            <h3>
+              Attachments <span id="att-count" class="count">0</span>
+              <button id="att-add" class="mini">add</button>
+            </h3>
+            <input id="att-input" type="file" multiple hidden />
+            <p class="hint">Pictures or documents Claude uses as reference. Claude decides whether an image belongs in the doc.</p>
+            <ul id="att-list" class="att-list"></ul>
+          </div>
+
+          <div class="panel">
+            <h3>Whole-document change</h3>
+            <textarea id="instruction" placeholder="Optional: ask for a global change, e.g. 'make the tone more formal'…"></textarea>
+          </div>
+
+          <button id="revise-btn" class="primary" disabled>Send to Claude</button>
+          <button id="regen-btn" class="ghost">Regenerate from premise</button>
+
+          <div class="panel">
+            <h3>Export</h3>
+            <div class="export-grid">
+              <button class="export-btn" data-format="html">HTML</button>
+              <button class="export-btn" data-format="pdf">PDF</button>
+              <button class="export-btn" data-format="docx">Word</button>
+              <button class="export-btn" data-format="pptx">PowerPoint</button>
             </div>
           </div>
 
@@ -125,38 +141,22 @@
             </div>
           </div>
 
-          <div class="panel">
-            <h3>
-              Attachments <span id="att-count" class="count">0</span>
-              <button id="att-add" class="mini">add</button>
-            </h3>
-            <input id="att-input" type="file" multiple hidden />
-            <p class="hint">Pictures or documents Claude uses as reference. Claude decides whether an image belongs in the doc.</p>
-            <ul id="att-list" class="att-list"></ul>
-          </div>
-
-          <div class="panel">
-            <h3>Comments <span id="comment-count" class="count">0</span></h3>
-            <p class="hint" id="comments-hint">Select text in the document to attach a comment.</p>
-            <ul id="comments" class="comments"></ul>
-          </div>
-
-          <div class="panel">
-            <h3>Whole-document change</h3>
-            <textarea id="instruction" placeholder="Optional: ask for a global change, e.g. 'make the tone more formal'…"></textarea>
-          </div>
-
-          <button id="revise-btn" class="primary" disabled>Send to Claude</button>
-          <button id="regen-btn" class="ghost">Regenerate from premise</button>
-
-          <div class="panel">
-            <h3>Export</h3>
-            <div class="export-grid">
-              <button class="export-btn" data-format="html">HTML</button>
-              <button class="export-btn" data-format="pdf">PDF</button>
-              <button class="export-btn" data-format="docx">Word</button>
-              <button class="export-btn" data-format="pptx">PowerPoint</button>
+          <div id="length-panel" class="panel length-panel hidden">
+            <div class="length-stat"><span id="length-readout">—</span></div>
+            <div id="length-target" class="length-target hidden">
+              <span id="length-target-text"></span>
+              <button id="length-adjust" class="mini"></button>
             </div>
+          </div>
+
+          <div id="cost-panel" class="panel cost-panel hidden">
+            <h3>Cost <button id="cost-toggle" class="mini" aria-expanded="false">details</button></h3>
+            <div class="cost-headline">
+              <span id="cost-usd">$0.000</span>
+              <span class="cost-sub">API-equivalent · <span id="cost-tokens">0</span> tokens</span>
+            </div>
+            <div id="cost-warn" class="cost-warn hidden"></div>
+            <ul id="cost-breakdown" class="cost-breakdown hidden"></ul>
           </div>
         </aside>
       </div>

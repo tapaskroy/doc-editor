@@ -7,6 +7,12 @@ a document, get a streamed first draft, then **select text and leave comments**
 to refine it. Revisions are applied as surgical find/replace edits, so the rest
 of your document stays exactly as it was.
 
+## Documentation
+
+- [`specs/product-spec.md`](specs/product-spec.md) — what it does (user-facing).
+- [`design/architecture.md`](design/architecture.md) — how it's built (design & decisions).
+- [`CLAUDE.md`](CLAUDE.md) — contributor guide / repo conventions & gotchas.
+
 ## How it works
 
 ```

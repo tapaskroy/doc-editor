@@ -973,6 +973,7 @@ async function showEditor(id) {
   renderCost(data.usage || []);
   renderVersions(data.versions || []);
   applyMailChrome(data);
+  loadPublishSkills(data);
 
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.
@@ -1434,6 +1435,111 @@ async function exportDoc(format, btn) {
     setStatus('');
   }
 }
+
+// ---- publish (output skills) -------------------------------------------
+// Discover installed output skills and offer them in the Publish panel. The app
+// knows nothing about what each skill does; it shells out to the skill's plan/run.
+
+async function loadPublishSkills(data) {
+  const panel = $('#publish-panel');
+  const list = $('#publish-list');
+  list.innerHTML = '';
+  // Publishing is a document action; hide it for emails (like Export).
+  if (data && data.kind === 'email') { panel.classList.add('hidden'); return; }
+  let skills = [];
+  try {
+    skills = (await api.json('/api/output-skills')).skills || [];
+  } catch {
+    skills = [];
+  }
+  if (!skills.length) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  for (const s of skills) {
+    const btn = document.createElement('button');
+    btn.className = 'export-btn publish-btn';
+    btn.textContent = s.name || s.id;
+    btn.title = s.description || '';
+    btn.addEventListener('click', () => openPublishGate(s));
+    list.appendChild(btn);
+  }
+}
+
+let currentPublish = null; // { skillId }
+
+async function openPublishGate(skill) {
+  if (!currentId) return;
+  await flushSave(); // publish the latest, including unsaved edits
+  currentPublish = { skillId: skill.id };
+  $('#pub-title').textContent = `Review before publishing — ${skill.name || skill.id}`;
+  $('#pub-slug').value = '';
+  $('#pub-files').innerHTML = '<p class="hint">Preparing…</p>';
+  $('#pub-commands').innerHTML = '';
+  $('#pub-lint').innerHTML = '';
+  $('#pub-preview').innerHTML = '';
+  $('#pub-url').textContent = '…';
+  $('#pub-modal').classList.remove('hidden');
+  await refreshPublishPlan();
+}
+
+// (Re)compute the plan and render the gate. The skill's plan is deterministic and
+// has no side effects, so we can re-plan freely (e.g. when the slug changes).
+async function refreshPublishPlan() {
+  if (!currentPublish) return;
+  const slug = $('#pub-slug').value.trim();
+  let r;
+  try {
+    r = await api.json(`/api/docs/${currentId}/output/plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skillId: currentPublish.skillId, params: slug ? { slug } : {} }),
+    });
+  } catch (e) {
+    $('#pub-files').innerHTML = `<p class="hint">Could not prepare: ${escapeHtml(e.message)}</p>`;
+    return;
+  }
+  const p = r.plan || {};
+  currentPublish.plan = p;
+  $('#pub-url').textContent = p.url || '—';
+  if (!$('#pub-slug').value && p.slug) $('#pub-slug').placeholder = p.slug;
+  $('#pub-files').innerHTML = (p.files || [])
+    .map((f) => `<div class="pub-file"><span class="pub-action pub-${escapeHtml(f.action)}">${escapeHtml(f.action)}</span> ${escapeHtml(f.path)}</div>`)
+    .join('') || '<p class="hint">No files.</p>';
+  $('#pub-commands').innerHTML = (p.commands || []).length
+    ? '<div class="pub-cmd-h">Commands that will run</div>' + (p.commands || []).map((c) => `<code class="pub-cmd">${escapeHtml(c)}</code>`).join('')
+    : '';
+  $('#pub-lint').innerHTML = (p.lint || []).map((w) => `<div class="lint-item">⚠︎ ${escapeHtml(w)}</div>`).join('');
+  $('#pub-preview').innerHTML = p.previewHtml || (typeof marked !== 'undefined' ? '' : '');
+  $('#pub-target').textContent = p.deploy && p.deploy.bucket ? `Deploys to ${p.deploy.bucket}` : '';
+  $('#pub-go').textContent = p.overwrite ? 'Publish (overwrite)' : 'Publish';
+}
+
+let pubSlugTimer = null;
+$('#pub-slug').addEventListener('input', () => { clearTimeout(pubSlugTimer); pubSlugTimer = setTimeout(refreshPublishPlan, 500); });
+$('#pub-close').addEventListener('click', () => $('#pub-modal').classList.add('hidden'));
+
+$('#pub-go').addEventListener('click', async () => {
+  if (!currentPublish) return;
+  const btn = $('#pub-go');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Publishing…';
+  const slug = $('#pub-slug').value.trim();
+  try {
+    const r = await api.json(`/api/docs/${currentId}/output/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skillId: currentPublish.skillId, params: slug ? { slug } : {} }),
+    });
+    $('#pub-modal').classList.add('hidden');
+    const url = r.result && r.result.url;
+    toast(url ? `Published: ${url}` : 'Published.');
+  } catch (e) {
+    toast('Publish failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
 
 // ---- text selection → comment ------------------------------------------
 

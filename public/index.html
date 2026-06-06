@@ -187,6 +187,12 @@
             </div>
           </div>
 
+          <div class="panel hidden" id="publish-panel">
+            <h3>Publish</h3>
+            <p class="hint">Output skills you have installed. These write or deploy, and pass through a review first.</p>
+            <div id="publish-list" class="export-grid"></div>
+          </div>
+
           <div class="panel">
             <h3>
               Versions <span id="ver-count" class="count">0</span>
@@ -271,6 +277,31 @@
           <span class="spacer"></span>
           <button id="gate-save" class="primary">Save to Drafts</button>
           <button id="gate-send" class="primary hidden">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish review gate (populated entirely by the skill's plan) -->
+    <div id="pub-modal" class="modal hidden">
+      <div class="modal-card gate-card">
+        <div class="modal-head">
+          <strong id="pub-title">Review before publishing</strong>
+          <button id="pub-close" class="ghost">Cancel</button>
+        </div>
+        <div class="gate-body">
+          <div class="gate-recipients">
+            <label>Slug <input id="pub-slug" type="text" placeholder="auto from title" /></label>
+            <p class="hint">Goes live at <span id="pub-url"></span></p>
+          </div>
+          <div id="pub-files" class="pub-files"></div>
+          <div id="pub-commands" class="pub-commands"></div>
+          <div id="pub-lint" class="gate-lint"></div>
+          <div class="gate-preview-wrap"><div id="pub-preview" class="gate-preview doc"></div></div>
+        </div>
+        <div class="modal-foot">
+          <span id="pub-target" class="hint"></span>
+          <span class="spacer"></span>
+          <button id="pub-go" class="primary">Publish</button>
         </div>
       </div>
     </div>

@@ -550,6 +550,19 @@ button {
 .gate-preview { padding: 14px 18px; }
 .gate-preview.doc { width: auto; min-height: 0; box-shadow: none; }
 
+/* ---- publish panel + gate ---- */
+.publish-btn { background: var(--accent-soft); }
+.pub-files { display: grid; gap: 4px; margin: 6px 0; }
+.pub-file { font-size: 13px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.pub-action { display: inline-block; min-width: 62px; text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; margin-right: 6px; }
+.pub-create { background: #e3f3e3; color: #1a6b2a; }
+.pub-overwrite { background: #fbe9d0; color: #9a5b00; }
+.pub-add, .pub-update, .pub-create-year, .pub-none, .pub-missing-index { background: #e6eef9; color: #2a4d8a; }
+.pub-commands { margin: 8px 0; display: grid; gap: 4px; }
+.pub-cmd-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.pub-cmd { display: block; font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; word-break: break-all; }
+#pub-url { font-weight: 600; }
+
 /* ---- email chrome in the editor (envelope + capability footer) ---- */
 .envelope { width: 8.5in; max-width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 18px; margin: 0 auto 14px; box-shadow: var(--shadow); }
 .env-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }

@@ -351,6 +351,77 @@ app.post('/api/docs/:id/revise', async (req, res) => {
   }
 });
 
+// --- Output skills (skill-driven Export / Publish) -----------------------
+// doc-editor discovers output skills and shells out to their plan/run CLI. The
+// procedure (render/deploy) lives in the skill, never here; the app only knows it
+// can call `plan` (no side effects, drives the gate) then `run` (after confirm).
+
+// Run a discovered output skill's subcommand: feed the doc on stdin, parse its
+// JSON on stdout. The skill is the user's own code (locked trust model); we run
+// its declared `command` in its own directory.
+function runOutputSkill(skill, sub, input) {
+  const { spawn } = require('child_process');
+  return new Promise((resolve, reject) => {
+    if (!skill.command) return reject(new Error(`skill "${skill.id}" declares no command`));
+    const parts = skill.command.split(/\s+/);
+    const child = spawn(parts[0], [...parts.slice(1), sub], { cwd: skill.dir, stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => (out += d.toString()));
+    child.stderr.on('data', (d) => (err += d.toString()));
+    child.on('error', (e) => reject(new Error(`failed to launch skill: ${e.message}`)));
+    child.on('close', (code) => {
+      let parsed = null;
+      try { parsed = JSON.parse(out.trim().split('\n').filter(Boolean).pop() || ''); } catch {}
+      if (parsed && parsed.ok === false) return reject(new Error(parsed.error || 'skill reported an error'));
+      if (!parsed) return reject(new Error(err.trim() || `skill exited ${code} without JSON output`));
+      resolve(parsed);
+    });
+    child.stdin.write(JSON.stringify(input));
+    child.stdin.end();
+  });
+}
+
+// The document payload the contract hands a skill.
+function docInput(id, params) {
+  const meta = docs.readMeta(id);
+  const media = (meta.attachments || []).map(({ refPath, ...a }) => a); // no server-only paths
+  return { markdown: docs.getMarkdown(id), title: meta.title, params: params || {}, media };
+}
+
+// List output skills for the Export panel (dir/command stay server-only).
+app.get('/api/output-skills', (req, res) => {
+  res.json({ skills: skills.listOutputs().map(({ dir, command, ...s }) => s) });
+});
+
+// Plan: no side effects; returns the data that populates the review gate.
+app.post('/api/docs/:id/output/plan', async (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const skill = skills.outputSkill((req.body || {}).skillId);
+  if (!skill) return res.status(404).json({ error: 'output skill not found' });
+  try {
+    const plan = await runOutputSkill(skill, 'plan', docInput(id, (req.body || {}).params));
+    res.json({ skill: { id: skill.id, name: skill.name, kind: skill.kind }, plan });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Run: the side effect, only after the gate confirms.
+app.post('/api/docs/:id/output/run', async (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const skill = skills.outputSkill((req.body || {}).skillId);
+  if (!skill) return res.status(404).json({ error: 'output skill not found' });
+  try {
+    const result = await runOutputSkill(skill, 'run', docInput(id, (req.body || {}).params));
+    res.json({ result });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Persist envelope / context / status / pointers for an email doc.
 app.put('/api/docs/:id/email', (req, res) => {
   const { id } = req.params;

@@ -337,8 +337,13 @@ design: `design/mail-design.md`.
 **Performance.** Mail spawns run in a **neutral cwd** (`RUN_DIR`, like generation),
 NOT the project — otherwise every call loads `CLAUDE.md` (~36k→8k tokens of
 cache-creation per call). Even so, each call is a ~20-30s `claude -p` + MCP round
-trip (the architectural floor — no persistent session). So: the Primary **inbox is
-cached** server-side (3-min TTL) and **pre-warmed on boot**; `searchThreads` is
+trip (the architectural floor — no persistent session). So mail is served from a
+**persistent local store** (`lib/mailstore.js` → gitignored `docs-cache/mail.json`)
+and **refreshed in the background** (on boot + a 3-min interval + opportunistically
+when stale): `GET /api/mail/inbox` returns the stored list **instantly and never
+blocks** on a fetch (it kicks a background refresh and the client polls briefly for
+the swap-in), so the rail renders in ~150ms even across restarts. Thread reads are
+cached the same way (instant after first open). `searchThreads` is
 relevance-tuned (translate to a focused query, scope to inbox, never pad) and the
 client debounces + fires on Enter (min 2 chars). Use **sonnet** for mail turns —
 haiku gave no speed win (it did MORE post-tool thinking). `mail.inbox()` lists

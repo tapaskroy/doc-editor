@@ -13,6 +13,7 @@ const skills = require('./lib/skills');
 const attachments = require('./lib/attachments');
 const versions = require('./lib/versions');
 const mail = require('./lib/mail');
+const mailstore = require('./lib/mailstore');
 
 // A short, single-line label for a revision snapshot from its request text.
 function shortLabel(request) {
@@ -405,39 +406,59 @@ app.get('/api/mail/threads', async (req, res) => {
   }
 });
 
-// The inbox call is slow (a Claude+MCP round trip), so cache it briefly and let
-// the boot pre-warm fill it — repeat opens of the Mail rail are then instant.
-let inboxCache = { at: 0, threads: null };
-const INBOX_TTL = 3 * 60 * 1000;
-async function getInbox(force) {
-  if (!force && inboxCache.threads && Date.now() - inboxCache.at < INBOX_TTL) return inboxCache.threads;
-  const threads = await mail.inbox({ limit: 10 });
-  inboxCache = { at: Date.now(), threads };
-  return threads;
-}
-app.get('/api/mail/inbox', async (req, res) => {
+// Mail is served from a PERSISTENT local store (lib/mailstore) so threads appear
+// instantly. The slow Claude+MCP fetches happen in the BACKGROUND — on boot, on an
+// interval, and opportunistically when something is stale — and never block a read.
+const INBOX_FRESH_MS = 3 * 60 * 1000;
+let refreshingInbox = false;
+async function refreshInbox() {
+  if (refreshingInbox) return;
+  refreshingInbox = true;
   try {
-    const fresh = req.query.refresh === '1';
-    const cached = !fresh && inboxCache.threads && Date.now() - inboxCache.at < INBOX_TTL;
-    res.json({ threads: await getInbox(fresh), cached: !!cached });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    mailstore.setInbox(await mail.inbox({ limit: 10 }));
+  } catch {
+    /* keep the last good cache */
+  } finally {
+    refreshingInbox = false;
   }
+}
+function refreshThread(id) {
+  mail.readThread(id).then((d) => mailstore.setThread(id, d)).catch(() => {});
+}
+
+// Inbox: respond IMMEDIATELY with the stored list; kick a background refresh if
+// stale (or forced). The client polls briefly for the updated list.
+app.get('/api/mail/inbox', (req, res) => {
+  const { threads, fetchedAt } = mailstore.getInbox();
+  const stale = Date.now() - (fetchedAt || 0) > INBOX_FRESH_MS;
+  if (req.query.refresh === '1' || stale) refreshInbox();
+  res.json({ threads, fetchedAt, refreshing: refreshingInbox });
 });
 
+// Thread read: serve the cached copy instantly when we have it (refresh in the
+// background if stale); otherwise fetch live once and cache it.
 app.get('/api/mail/threads/:id', async (req, res) => {
+  const { id } = req.params;
+  const cached = mailstore.getThread(id);
+  if (cached && req.query.refresh !== '1') {
+    if (Date.now() - (cached.fetchedAt || 0) > INBOX_FRESH_MS) refreshThread(id);
+    return res.json({ ...cached.data, fetchedAt: cached.fetchedAt, cached: true });
+  }
   try {
-    res.json(await mail.readThread(req.params.id));
+    const data = await mail.readThread(id);
+    mailstore.setThread(id, data);
+    res.json({ ...data, fetchedAt: Date.now() });
   } catch (err) {
+    if (cached) return res.json({ ...cached.data, fetchedAt: cached.fetchedAt, cached: true });
     res.status(500).json({ error: err.message });
   }
 });
 
 app.listen(PORT, HOST, () => {
   console.log(`\n  📝  Doc editor running at  http://localhost:${PORT}\n`);
-  // Pre-warm mail capabilities + the Primary inbox so the first Mail open is fast.
-  mail.capabilities()
-    .then(() => getInbox(true))
-    .then((t) => console.log(`  ✉️   Mail ready (${t.length} recent threads cached)\n`))
-    .catch(() => {});
+  // Serve the stored inbox instantly; keep it fresh in the background.
+  const cached = mailstore.getInbox();
+  console.log(`  ✉️   Mail: ${cached.threads.length} threads from local cache; refreshing in background…\n`);
+  mail.capabilities().then(refreshInbox).catch(() => {});
+  setInterval(() => { refreshInbox(); }, INBOX_FRESH_MS);
 });

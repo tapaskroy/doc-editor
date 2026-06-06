@@ -254,23 +254,26 @@ async function showMail() {
   }
 }
 
-// Recent Primary inbox threads (cached for the session — the call is slow).
-let mailInboxCache = null;
+// The inbox is served instantly from the server's local cache; a background
+// refresh keeps it fresh. We render whatever arrives immediately and poll briefly
+// for the refreshed list (rather than blocking on the slow fetch).
+let mailInboxPoll = null;
 async function loadInbox(force = false) {
   const ul = $('#mail-inbox');
-  if (mailInboxCache && !force) return renderInbox(mailInboxCache);
-  ul.innerHTML = '<li class="hint">Loading recent mail…</li>';
+  if (!ul.children.length) ul.innerHTML = '<li class="hint">Loading…</li>';
   try {
-    const { threads = [] } = await api.json('/api/mail/inbox' + (force ? '?refresh=1' : ''));
-    mailInboxCache = threads;
-    renderInbox(threads);
+    const r = await api.json('/api/mail/inbox' + (force ? '?refresh=1' : ''));
+    renderInbox(r);
+    scheduleInboxPoll(r);
   } catch (e) {
     ul.innerHTML = `<li class="hint">Could not load inbox: ${escapeHtml(e.message)}</li>`;
   }
 }
-function renderInbox(threads) {
+
+function renderInbox(r) {
+  const threads = (r && r.threads) || [];
   const ul = $('#mail-inbox');
-  ul.innerHTML = threads.length ? '' : '<li class="hint">No recent Primary mail.</li>';
+  ul.innerHTML = threads.length ? '' : `<li class="hint">${r && r.refreshing ? 'Fetching your mail…' : 'No recent Primary mail.'}</li>`;
   for (const t of threads) {
     const li = document.createElement('li');
     li.innerHTML =
@@ -279,6 +282,30 @@ function renderInbox(threads) {
     li.addEventListener('click', () => openThread(t));
     ul.appendChild(li);
   }
+  const status = $('#mail-inbox-status');
+  if (r && r.refreshing) status.textContent = 'refreshing…';
+  else if (r && r.fetchedAt) status.textContent = 'updated ' + timeAgo(new Date(r.fetchedAt).toISOString());
+  else status.textContent = '';
+}
+
+// While the server refreshes (or we have nothing yet), poll so the fresh list
+// swaps in on its own. Stops once fresh, after a cap, or on leaving the view.
+function scheduleInboxPoll(r) {
+  if (mailInboxPoll) { clearInterval(mailInboxPoll); mailInboxPoll = null; }
+  const needs = r && (r.refreshing || !(r.threads && r.threads.length));
+  if (!needs) return;
+  let tries = 0;
+  mailInboxPoll = setInterval(async () => {
+    if (location.hash !== '#/mail') { clearInterval(mailInboxPoll); mailInboxPoll = null; return; }
+    tries += 1;
+    try {
+      const r2 = await api.json('/api/mail/inbox');
+      renderInbox(r2);
+      if ((!r2.refreshing && r2.threads && r2.threads.length) || tries > 15) { clearInterval(mailInboxPoll); mailInboxPoll = null; }
+    } catch {
+      if (tries > 15) { clearInterval(mailInboxPoll); mailInboxPoll = null; }
+    }
+  }, 3000);
 }
 $('#mail-inbox-refresh').addEventListener('click', () => loadInbox(true));
 

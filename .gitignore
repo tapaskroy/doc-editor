@@ -4,3 +4,4 @@ docs/*.meta.json
 !docs/.gitkeep
 docs-assets/
 docs-versions/
+docs-cache/

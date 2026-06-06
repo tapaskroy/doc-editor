@@ -341,8 +341,22 @@ trip (the architectural floor — no persistent session). So: the Primary **inbo
 cached** server-side (3-min TTL) and **pre-warmed on boot**; `searchThreads` is
 relevance-tuned (translate to a focused query, scope to inbox, never pad) and the
 client debounces + fires on Enter (min 2 chars). Use **sonnet** for mail turns —
-haiku gave no speed win. `mail.inbox()` lists recent Primary threads
-(provider-agnostic; Gmail `in:inbox category:primary`).
+haiku gave no speed win (it did MORE post-tool thinking). `mail.inbox()` lists
+recent Primary threads (provider-agnostic; Gmail `in:inbox category:primary`).
+
+> **Gotcha (load-bearing, biggest latency lever):** for list reads
+> (`searchThreads`/`inbox`) we **capture the MCP tool's raw `tool_result` from the
+> stream-json output and `SIGKILL` the process the instant it arrives** (`mcpRead`),
+> rather than waiting for the model to re-format it. Measured breakdown of a ~18-30s
+> call: the model's reformatting turn was **~9s of pure waste** (the tool result
+> already holds the data). Capturing it took search/inbox to **~7s**. Because we
+> skip the model's curation, **relevance must live in the query** — the prompts tell
+> the model to scope to `in:inbox category:primary` (Gmail) by default, which keeps
+> results clean. Also: the spawned CLI **defers MCP tools**, so the model burns a
+> turn on `ToolSearch` to load the schema before calling; `mcpRead` matches the
+> result by the real tool's `tool_use_id` to ignore that detour. `--effort low`
+> trims the thinking. `readThread`/`saveDraft`/`capabilities` still use the full
+> model turn (lower-frequency, or they need the model's own output/usage).
 
 ## Data model
 

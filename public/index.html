@@ -95,6 +95,22 @@
             <p class="sub small">“Draft it” writes immediately. “Let's talk” has Claude interview you first, for a more targeted email.</p>
             <p id="mail-cap" class="hint"></p>
           </div>
+
+          <div class="mail-reader hidden">
+            <div class="reader-head">
+              <button id="reader-back" class="ghost">← Back</button>
+              <h1 id="reader-subject"></h1>
+            </div>
+            <div id="reader-messages" class="reader-messages"></div>
+            <div class="reader-actions">
+              <button id="reader-draft" class="primary">Draft a reply →</button>
+              <button id="reader-talk" class="ghost">Let's talk about a reply →</button>
+              <button id="reader-attach" class="ghost" title="Attach a file for Claude to use when drafting the reply">📎 Attach</button>
+              <input id="reader-attach-input" type="file" multiple hidden />
+            </div>
+            <ul id="reader-attach-chips" class="chips js-chips"></ul>
+            <p class="sub small">Reply goes to the sender only. “Let's talk” plans the reply with you first.</p>
+          </div>
         </section>
       </div>
     </main>

@@ -202,6 +202,7 @@ async function getMailCaps() {
 
 async function showMail() {
   show('mail');
+  showComposerPane(); // default to the composer; reading a thread swaps it in
   $('#doc-title').textContent = '';
   setStatus('');
   $('#mail-results').innerHTML = '';
@@ -275,7 +276,7 @@ function renderInbox(threads) {
     li.innerHTML =
       `<span class="subj">${escapeHtml(t.subject || '(no subject)')}</span>` +
       `<span class="from">${escapeHtml(t.from || '')}</span>`;
-    li.addEventListener('click', () => replyToThread(t));
+    li.addEventListener('click', () => openThread(t));
     ul.appendChild(li);
   }
 }
@@ -324,6 +325,7 @@ $('#mail-talk').addEventListener('click', () => {
   if (!premise) { $('#mail-premise').focus(); return; }
   briefPremise = premise;
   briefKind = 'email';
+  briefEmailInit = null;
   $('#mail-premise').value = '';
   location.hash = '#/brief';
 });
@@ -362,7 +364,7 @@ async function searchThreads(q) {
       li.innerHTML =
         `<span class="subj">${escapeHtml(t.subject || '(no subject)')}</span>` +
         `<span class="from">${escapeHtml(t.from || '')}</span>`;
-      li.addEventListener('click', () => replyToThread(t));
+      li.addEventListener('click', () => openThread(t));
       ul.appendChild(li);
     }
   } catch (e) {
@@ -370,30 +372,107 @@ async function searchThreads(q) {
   }
 }
 
-// Reply = to the sender only (literal scope; never silently reply-all). The
-// thread is read transiently and handed over as drafting context.
-async function replyToThread(t) {
-  setStatus('Reading thread…');
+// Reading a thread: clicking a thread shows it read-only in the right pane with
+// reply actions. Drafting happens only when the user chooses one — no auto-draft.
+let currentThread = null;
+
+function showReader() { $('.mail-composer').classList.add('hidden'); $('.mail-reader').classList.remove('hidden'); }
+function showComposerPane() { $('.mail-reader').classList.add('hidden'); $('.mail-composer').classList.remove('hidden'); }
+
+async function openThread(t) {
+  showReader();
+  $('#reader-subject').textContent = t.subject || '…';
+  $('#reader-messages').innerHTML = '<p class="hint">Loading the thread…</p>';
+  currentThread = null;
   try {
-    const thr = await api.json('/api/mail/threads/' + encodeURIComponent(t.id));
-    const msgs = thr.messages || [];
-    const last = msgs[msgs.length - 1] || {};
-    const quoted = msgs.map((m) => `From: ${m.from || ''}\nDate: ${m.date || ''}\n\n${m.body || ''}`).join('\n\n-----\n\n');
-    const subject = thr.subject ? `Re: ${thr.subject.replace(/^re:\s*/i, '')}` : '';
-    await composeEmail({
-      premise: 'Draft a reply to the sender of this email thread. Reply to the sender only (not reply-all), consistent with the conversation.',
-      email: {
-        envelope: { to: last.from ? [last.from] : [], subject, threadId: t.id, replyToMessageId: last.id || null },
-        replyScope: 'sender',
-        context: { text: `Thread being replied to:\n\n${quoted}` },
-      },
-    });
+    const thread = await api.json('/api/mail/threads/' + encodeURIComponent(t.id));
+    thread.id = t.id;
+    currentThread = thread;
+    renderReader(thread);
   } catch (e) {
-    toast('Could not open thread: ' + e.message);
-  } finally {
-    setStatus('');
+    $('#reader-messages').innerHTML = `<p class="hint">Could not load this thread: ${escapeHtml(e.message)}</p>`;
   }
 }
+
+function renderReader(thread) {
+  $('#reader-subject').textContent = thread.subject || '(no subject)';
+  const box = $('#reader-messages');
+  box.innerHTML = '';
+  if (thread.truncated) {
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = 'Showing the most recent messages in this thread.';
+    box.appendChild(note);
+  }
+  for (const m of thread.messages || []) {
+    const div = document.createElement('div');
+    div.className = 'reader-msg';
+    const meta = document.createElement('div');
+    meta.className = 'reader-meta';
+    meta.innerHTML = `<span class="reader-from">${escapeHtml(m.from || '')}</span><span class="reader-date">${escapeHtml(timeAgo(m.date) || '')}</span>`;
+    const body = document.createElement('div');
+    body.className = 'reader-body';
+    body.textContent = m.body || '(no text)';
+    div.appendChild(meta);
+    div.appendChild(body);
+    box.appendChild(div);
+  }
+}
+
+// Build the reply seed from the thread already open in the reader. Sender-only
+// (literal reply scope; never silently reply-all).
+function buildReplySeed() {
+  const t = currentThread || { messages: [] };
+  const msgs = t.messages || [];
+  const last = msgs[msgs.length - 1] || {};
+  const quoted = msgs.map((m) => `From: ${m.from || ''}\nDate: ${m.date || ''}\n\n${m.body || ''}`).join('\n\n-----\n\n');
+  const subject = t.subject ? `Re: ${t.subject.replace(/^re:\s*/i, '')}` : '';
+  return {
+    email: {
+      envelope: { to: last.from ? [last.from] : [], subject, threadId: t.id, replyToMessageId: last.id || null },
+      replyScope: 'sender',
+      context: { text: `Thread being replied to:\n\n${quoted}` },
+    },
+    to: last.from || '',
+    subject,
+    quoted,
+  };
+}
+
+// Start a reply: draft it now (open the editor, which streams the reply) or plan
+// it first via the interview. Staged attachments ride along on a draft-it-now.
+async function startReply({ talk }) {
+  if (!currentThread) return;
+  const seed = buildReplySeed();
+  if (talk) {
+    briefPremise = `Help me write a reply to this email thread.\n\nFrom: ${seed.to || 'the sender'}\nSubject: ${seed.subject}\n\n${seed.quoted.slice(0, 1500)}`;
+    briefKind = 'email';
+    briefEmailInit = seed.email;
+    location.hash = '#/brief';
+    return;
+  }
+  try {
+    const meta = await api.json('/api/docs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'email',
+        premise: 'Draft a reply to the sender of this email thread. Reply to the sender only (not reply-all), consistent with the conversation.',
+        email: seed.email,
+      }),
+    });
+    if (pendingAttachments.length) await uploadPending(meta.id);
+    location.hash = `#/doc/${meta.id}`;
+  } catch (e) {
+    toast('Could not start the reply: ' + e.message);
+  }
+}
+
+$('#reader-back').addEventListener('click', showComposerPane);
+$('#reader-draft').addEventListener('click', () => startReply({ talk: false }));
+$('#reader-talk').addEventListener('click', () => startReply({ talk: true }));
+$('#reader-attach').addEventListener('click', () => $('#reader-attach-input').click());
+$('#reader-attach-input').addEventListener('change', (e) => { pendingAttachments.push(...e.target.files); e.target.value = ''; renderChips(); });
 
 // Show/hide email chrome (envelope + capability footer) in the editor, and swap
 // the Export panel (docs) for mailbox commit actions (emails).
@@ -614,6 +693,7 @@ async function uploadPending(docId) {
 // briefKind carries whether the resulting draft is a document or an email.
 let briefPremise = '';
 let briefKind = '';
+let briefEmailInit = null; // when planning a reply via the interview, carries its envelope/context
 $('#talk-btn').addEventListener('click', () => {
   const premise = $('#premise').value.trim();
   if (!premise) {
@@ -622,6 +702,7 @@ $('#talk-btn').addEventListener('click', () => {
   }
   briefPremise = premise;
   briefKind = '';
+  briefEmailInit = null;
   $('#premise').value = '';
   location.hash = '#/brief';
 });
@@ -721,8 +802,9 @@ $('#brief-draft').addEventListener('click', async () => {
     const meta = await api.json('/api/docs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort, kind: briefKind || undefined }),
+      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort, kind: briefKind || undefined, email: briefEmailInit || undefined }),
     });
+    briefEmailInit = null;
     if (pendingAttachments.length) {
       btn.textContent = 'Uploading attachments…';
       await uploadPending(meta.id);

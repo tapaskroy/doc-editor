@@ -533,6 +533,7 @@ button {
 .reader-from { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-date { flex: none; }
 .reader-body { white-space: pre-wrap; font-size: 14px; line-height: 1.55; max-height: 340px; overflow-y: auto; }
+.reader-frame { width: 100%; height: 460px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .reader-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 
 /* ---- review gate modal ---- */

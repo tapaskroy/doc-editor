@@ -343,7 +343,13 @@ and **refreshed in the background** (on boot + a 3-min interval + opportunistica
 when stale): `GET /api/mail/inbox` returns the stored list **instantly and never
 blocks** on a fetch (it kicks a background refresh and the client polls briefly for
 the swap-in), so the rail renders in ~150ms even across restarts. Thread reads are
-cached the same way (instant after first open). `searchThreads` is
+cached the same way, and inbox thread bodies are **background-prefetched** after
+each list refresh so opening a thread is instant (first-ever open still ~7s, then
+cached). The reader renders each message's **`htmlBody` in a sandboxed iframe**
+(faithful formatting, no scripts); `messageBody()` prefers a substantial plaintext
+part else stripped HTML (some senders put junk like literally `"False"` in the
+plaintext part). `mailstore` is versioned — bump `VERSION` when the cached shape
+changes to invalidate old caches. `searchThreads` is
 relevance-tuned (translate to a focused query, scope to inbox, never pad) and the
 client debounces + fires on Enter (min 2 chars). Use **sonnet** for mail turns —
 haiku gave no speed win (it did MORE post-tool thinking). `mail.inbox()` lists

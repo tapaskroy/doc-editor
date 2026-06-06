@@ -437,11 +437,22 @@ function renderReader(thread) {
     const meta = document.createElement('div');
     meta.className = 'reader-meta';
     meta.innerHTML = `<span class="reader-from">${escapeHtml(m.from || '')}</span><span class="reader-date">${escapeHtml(timeAgo(m.date) || '')}</span>`;
-    const body = document.createElement('div');
-    body.className = 'reader-body';
-    body.textContent = m.body || '(no text)';
     div.appendChild(meta);
-    div.appendChild(body);
+    if (m.html && m.html.trim()) {
+      // Render the email's own HTML faithfully, isolated in a sandboxed iframe
+      // (no scripts, its CSS can't leak into the app).
+      const frame = document.createElement('iframe');
+      frame.className = 'reader-frame';
+      frame.setAttribute('sandbox', '');
+      frame.setAttribute('referrerpolicy', 'no-referrer');
+      frame.srcdoc = m.html;
+      div.appendChild(frame);
+    } else {
+      const body = document.createElement('div');
+      body.className = 'reader-body';
+      body.textContent = m.body || '(no text)';
+      div.appendChild(body);
+    }
     box.appendChild(div);
   }
 }

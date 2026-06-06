@@ -416,6 +416,7 @@ async function refreshInbox() {
   refreshingInbox = true;
   try {
     mailstore.setInbox(await mail.inbox({ limit: 10 }));
+    prefetchInboxThreads(); // background: warm thread bodies so opening is instant
   } catch {
     /* keep the last good cache */
   } finally {
@@ -424,6 +425,25 @@ async function refreshInbox() {
 }
 function refreshThread(id) {
   mail.readThread(id).then((d) => mailstore.setThread(id, d)).catch(() => {});
+}
+
+// Warm each inbox thread's body in the background (sequential, gentle), so that
+// clicking a thread opens instantly. Skips threads already cached recently.
+let prefetching = false;
+const THREAD_FRESH_MS = 30 * 60 * 1000;
+async function prefetchInboxThreads() {
+  if (prefetching) return;
+  prefetching = true;
+  try {
+    const { threads } = mailstore.getInbox();
+    for (const t of threads || []) {
+      const cached = mailstore.getThread(t.id);
+      if (cached && Date.now() - (cached.fetchedAt || 0) < THREAD_FRESH_MS) continue;
+      try { mailstore.setThread(t.id, await mail.readThread(t.id)); } catch { /* skip */ }
+    }
+  } finally {
+    prefetching = false;
+  }
 }
 
 // Inbox: respond IMMEDIATELY with the stored list; kick a background refresh if

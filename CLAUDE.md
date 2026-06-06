@@ -355,8 +355,13 @@ recent Primary threads (provider-agnostic; Gmail `in:inbox category:primary`).
 > results clean. Also: the spawned CLI **defers MCP tools**, so the model burns a
 > turn on `ToolSearch` to load the schema before calling; `mcpRead` matches the
 > result by the real tool's `tool_use_id` to ignore that detour. `--effort low`
-> trims the thinking. `readThread`/`saveDraft`/`capabilities` still use the full
-> model turn (lower-frequency, or they need the model's own output/usage).
+> trims the thinking. `readThread` also uses `mcpRead`, with two wrinkles: a large
+> `get_thread` result **exceeds the tool-result token cap and is offloaded to a
+> file** (the result becomes a "saved to <path>" notice) — `mcpRead` reads that
+> file; and message bodies arrive as `plaintextBody`/`htmlBody` (no plain `body`),
+> so `messageBody()` prefers plaintext, strips HTML otherwise, and caps length.
+> `saveDraft`/`capabilities` still use the full model turn (they need the model's
+> own output/usage).
 
 ## Data model
 

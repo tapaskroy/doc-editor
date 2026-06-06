@@ -383,7 +383,7 @@ async function replyToThread(t) {
     await composeEmail({
       premise: 'Draft a reply to the sender of this email thread. Reply to the sender only (not reply-all), consistent with the conversation.',
       email: {
-        envelope: { to: last.from ? [last.from] : [], subject, threadId: t.id },
+        envelope: { to: last.from ? [last.from] : [], subject, threadId: t.id, replyToMessageId: last.id || null },
         replyScope: 'sender',
         context: { text: `Thread being replied to:\n\n${quoted}` },
       },

@@ -289,10 +289,8 @@
           <button id="pub-close" class="ghost">Cancel</button>
         </div>
         <div class="gate-body">
-          <div class="gate-recipients">
-            <label>Slug <input id="pub-slug" type="text" placeholder="auto from title" /></label>
-            <p class="hint">Goes live at <span id="pub-url"></span></p>
-          </div>
+          <div id="pub-inputs" class="pub-inputs"></div>
+          <p class="hint" id="pub-url-line" hidden>Location: <span id="pub-url"></span></p>
           <div id="pub-files" class="pub-files"></div>
           <div id="pub-commands" class="pub-commands"></div>
           <div id="pub-lint" class="gate-lint"></div>

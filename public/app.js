@@ -1464,34 +1464,78 @@ async function loadPublishSkills(data) {
   }
 }
 
-let currentPublish = null; // { skillId }
+let currentPublish = null; // { skillId, plan }
 
 async function openPublishGate(skill) {
   if (!currentId) return;
   await flushSave(); // publish the latest, including unsaved edits
   currentPublish = { skillId: skill.id };
   $('#pub-title').textContent = `Review before publishing — ${skill.name || skill.id}`;
-  $('#pub-slug').value = '';
+  $('#pub-inputs').innerHTML = '';
+  $('#pub-inputs').dataset.sig = '';
   $('#pub-files').innerHTML = '<p class="hint">Preparing…</p>';
   $('#pub-commands').innerHTML = '';
   $('#pub-lint').innerHTML = '';
   $('#pub-preview').innerHTML = '';
-  $('#pub-url').textContent = '…';
+  $('#pub-url-line').hidden = true;
   $('#pub-modal').classList.remove('hidden');
-  await refreshPublishPlan();
+  await refreshPublishPlan({}); // first plan with the skill's defaults
 }
 
-// (Re)compute the plan and render the gate. The skill's plan is deterministic and
-// has no side effects, so we can re-plan freely (e.g. when the slug changes).
-async function refreshPublishPlan() {
+// Read the current values of the skill-declared input controls.
+function collectPublishParams() {
+  const params = {};
+  $('#pub-inputs').querySelectorAll('[data-key]').forEach((el) => { params[el.dataset.key] = el.value; });
+  return params;
+}
+
+// Render the inputs the skill's plan declared (text / select). Rebuilds only when
+// the input *set* changes, so re-planning (on a value change) never steals focus.
+function renderPublishInputs(inputs) {
+  const box = $('#pub-inputs');
+  const sig = (inputs || []).map((i) => `${i.key}:${i.type}`).join('|');
+  if (box.dataset.sig === sig && box.children.length) return;
+  box.dataset.sig = sig;
+  box.innerHTML = '';
+  for (const inp of inputs || []) {
+    const label = document.createElement('label');
+    label.className = 'pub-input';
+    label.appendChild(document.createTextNode(inp.label || inp.key));
+    let ctrl;
+    if (inp.type === 'select') {
+      ctrl = document.createElement('select');
+      for (const o of inp.options || []) {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.label || o.value;
+        if (o.value === inp.value) opt.selected = true;
+        ctrl.appendChild(opt);
+      }
+      ctrl.addEventListener('change', () => refreshPublishPlan(collectPublishParams()));
+    } else {
+      ctrl = document.createElement('input');
+      ctrl.type = 'text';
+      ctrl.value = inp.value || '';
+      if (inp.placeholder) ctrl.placeholder = inp.placeholder;
+      let t = null;
+      ctrl.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => refreshPublishPlan(collectPublishParams()), 500); });
+    }
+    ctrl.dataset.key = inp.key;
+    label.appendChild(ctrl);
+    box.appendChild(label);
+  }
+}
+
+// (Re)compute the plan and render the gate generically — the skill's plan is
+// deterministic and side-effect-free, so we can re-plan on any input change.
+async function refreshPublishPlan(params) {
   if (!currentPublish) return;
-  const slug = $('#pub-slug').value.trim();
   let r;
   try {
     r = await api.json(`/api/docs/${currentId}/output/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skillId: currentPublish.skillId, params: slug ? { slug } : {} }),
+      body: JSON.stringify({ skillId: currentPublish.skillId, params: params || {} }),
     });
   } catch (e) {
     $('#pub-files').innerHTML = `<p class="hint">Could not prepare: ${escapeHtml(e.message)}</p>`;
@@ -1499,22 +1543,21 @@ async function refreshPublishPlan() {
   }
   const p = r.plan || {};
   currentPublish.plan = p;
-  $('#pub-url').textContent = p.url || '—';
-  if (!$('#pub-slug').value && p.slug) $('#pub-slug').placeholder = p.slug;
+  renderPublishInputs(p.inputs);
+  $('#pub-url-line').hidden = !p.url;
+  if (p.url) $('#pub-url').textContent = p.url;
   $('#pub-files').innerHTML = (p.files || [])
     .map((f) => `<div class="pub-file"><span class="pub-action pub-${escapeHtml(f.action)}">${escapeHtml(f.action)}</span> ${escapeHtml(f.path)}</div>`)
-    .join('') || '<p class="hint">No files.</p>';
+    .join('');
   $('#pub-commands').innerHTML = (p.commands || []).length
-    ? '<div class="pub-cmd-h">Commands that will run</div>' + (p.commands || []).map((c) => `<code class="pub-cmd">${escapeHtml(c)}</code>`).join('')
+    ? '<div class="pub-cmd-h">Commands that will run</div>' + p.commands.map((c) => `<code class="pub-cmd">${escapeHtml(c)}</code>`).join('')
     : '';
   $('#pub-lint').innerHTML = (p.lint || []).map((w) => `<div class="lint-item">⚠︎ ${escapeHtml(w)}</div>`).join('');
-  $('#pub-preview').innerHTML = p.previewHtml || (typeof marked !== 'undefined' ? '' : '');
-  $('#pub-target').textContent = p.deploy && p.deploy.bucket ? `Deploys to ${p.deploy.bucket}` : '';
+  $('#pub-preview').innerHTML = p.previewHtml || '';
+  $('#pub-target').textContent = p.target || (p.deploy && p.deploy.bucket ? `Deploys to ${p.deploy.bucket}` : '');
   $('#pub-go').textContent = p.overwrite ? 'Publish (overwrite)' : 'Publish';
 }
 
-let pubSlugTimer = null;
-$('#pub-slug').addEventListener('input', () => { clearTimeout(pubSlugTimer); pubSlugTimer = setTimeout(refreshPublishPlan, 500); });
 $('#pub-close').addEventListener('click', () => $('#pub-modal').classList.add('hidden'));
 
 $('#pub-go').addEventListener('click', async () => {
@@ -1522,19 +1565,18 @@ $('#pub-go').addEventListener('click', async () => {
   const btn = $('#pub-go');
   btn.disabled = true;
   const orig = btn.textContent;
-  btn.textContent = 'Publishing…';
-  const slug = $('#pub-slug').value.trim();
+  btn.textContent = 'Working…';
   try {
     const r = await api.json(`/api/docs/${currentId}/output/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skillId: currentPublish.skillId, params: slug ? { slug } : {} }),
+      body: JSON.stringify({ skillId: currentPublish.skillId, params: collectPublishParams() }),
     });
     $('#pub-modal').classList.add('hidden');
     const url = r.result && r.result.url;
-    toast(url ? `Published: ${url}` : 'Published.');
+    toast(url ? `Done: ${url}` : 'Done.');
   } catch (e) {
-    toast('Publish failed: ' + e.message);
+    toast('Failed: ' + e.message);
   } finally {
     btn.disabled = false;
     btn.textContent = orig;

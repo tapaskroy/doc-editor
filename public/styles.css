@@ -552,6 +552,9 @@ button {
 
 /* ---- publish panel + gate ---- */
 .publish-btn { background: var(--accent-soft); }
+.pub-inputs { display: grid; gap: 8px; margin-bottom: 4px; }
+.pub-input { display: grid; grid-template-columns: 80px 1fr; align-items: center; gap: 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.pub-input input, .pub-input select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font: inherit; background: var(--paper); color: var(--ink); text-transform: none; letter-spacing: normal; }
 .pub-files { display: grid; gap: 4px; margin: 6px 0; }
 .pub-file { font-size: 13px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .pub-action { display: inline-block; min-width: 62px; text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 5px; margin-right: 6px; }

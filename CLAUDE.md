@@ -13,6 +13,37 @@ Claude, which returns surgical edits that are spliced into the document.
 > It runs locally, single-user, with no auth, no tests beyond manual smoke
 > checks, and no multi-user/concurrency story. Treat it as a toy to iterate on.
 
+## Why this exists (north star)
+
+The point is not "a better word processor with AI in it." That is table stakes and
+the incumbents (Google, Microsoft) will bundle it. The point is to **bring the
+person to the AI**: let the user keep teaching the tool who they are, so it shows
+up in their writing, a little more every day.
+
+That is the flywheel, and it is the moat:
+
+```
+initial voice  ->  better draft  ->  user edits it  ->  learn from the edits
+      ^                                                         |
+      |                                                    skillify (capture)
+      +----  voice + context get better  <----  improved skills  <-+
+```
+
+Two assets compound here, and they are different: **voice** (how the user writes,
+converges fast) and **context** (what the user knows: their people, projects,
+facts, history, grows without bound). The highest-signal input is the **diff**
+between what Claude wrote and what the user kept; mining those edits and proposing
+skill updates ("learn from my edits") is the literal center of the flywheel and the
+feature most worth building. Keep the loop **consented and legible** (the user
+reviews what was learned before it is baked in), the same principle as the review
+gate. The result is lock-in the user *wants*: leaving means re-teaching a new tool
+who they are.
+
+Design consequences: stay personal (resist multi-user collaboration and the
+storage/format war, which are the incumbents' home turf); interop in, publish out;
+keep skills as portable, user-owned, editable files. Full strategy in
+[`specs/vision.md`](specs/vision.md).
+
 ## Running it
 
 ```bash

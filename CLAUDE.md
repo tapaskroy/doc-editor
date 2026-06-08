@@ -293,8 +293,8 @@ This is step 1 of the personal-memory work (`specs/personal-memory-spec.md`,
 ### Personal memory (`lib/memory.js`) — the durable, cross-document layer
 
 The "what is true about me" store, sibling to the voice store ("how I write"). The
-store is built (step 2), wired into generate/revise (step 3), and fed by intake
-capture (step 4). The Profile-tab UI is step 5.
+store is built (step 2), wired into generate/revise (step 3), fed by intake capture
+(step 4), and surfaced in a Profile tab (step 5).
 
 - **Canonical content is portable Markdown the user owns**, OUTSIDE the repo:
   `$DOC_EDITOR_MEMORY_DIR` (default `~/.config/doc-editor/memory/`) → `USER.md` (the
@@ -328,6 +328,13 @@ capture (step 4). The Profile-tab UI is step 5.
   `~/.claude/USER.md` and adds an idempotent `@USER.md` import to `~/.claude/CLAUDE.md`
   so the user's OTHER Claude sessions benefit. Decision A — it edits a file outside the
   store, so it must be user-consented; overridable target via `DOC_EDITOR_CLAUDE_DIR`.
+- **UI (Profile tab, `#/profile`):** about-you (view/edit `USER.md`), the unsaved
+  keep/discard queue, kept facts (forget), topics, and the consented "Sync to
+  ~/.claude" button. In the editor, a Personal-memory panel shows "what this draft
+  will use" and the per-doc personal-facts toggle. Routes: `GET /api/memory`,
+  `POST /api/memory/{keep,discard,forget}`, `PUT /api/memory/profile`,
+  `POST /api/memory/sync`, plus `GET /api/docs/:id/context` and
+  `PUT /api/docs/:id/use-personal-facts`.
 
 The reviser also has a tolerant JSON extractor (handles stray text / code fences)
 and a single sterner retry, as belt-and-suspenders against occasional drift.

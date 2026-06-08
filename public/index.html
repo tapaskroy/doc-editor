@@ -13,6 +13,7 @@
       <nav class="surface-switch">
         <a href="#/" id="nav-docs" class="active">Docs</a>
         <a href="#/mail" id="nav-mail">Mail</a>
+        <a href="#/profile" id="nav-profile">Profile</a>
       </nav>
       <span id="doc-title" class="doc-title"></span>
       <span id="save-state" class="save-state"></span>
@@ -116,6 +117,55 @@
       </div>
     </main>
 
+    <!-- PROFILE VIEW (personal memory: what the tool knows about you) -->
+    <main id="view-profile" class="view hidden">
+      <section class="profile">
+        <h1>What the editor knows about you</h1>
+        <p class="sub">Your personal memory. The editor uses this to ground your writing, so it stays accurate and doesn't invent details. It stays on your machine. Private facts are not put into a document unless that document calls for them.</p>
+
+        <div class="profile-cols">
+          <div class="profile-main">
+            <div class="panel">
+              <h3>Unsaved memory &amp; context <span id="mem-queue-count" class="count">0</span></h3>
+              <p class="hint">Facts the editor noticed while you were planning a document. Nothing here is remembered until you keep it.</p>
+              <ul id="mem-queue" class="mem-queue"></ul>
+            </div>
+
+            <div class="panel">
+              <h3>About you <button id="mem-profile-edit" class="mini">edit</button></h3>
+              <p class="hint">Your profile (USER.md). The always-on core the editor reads before writing.</p>
+              <div id="mem-profile-view" class="mem-profile doc"></div>
+              <div id="mem-profile-editor" class="hidden">
+                <textarea id="mem-profile-text" class="mem-profile-text" spellcheck="false"></textarea>
+                <div class="mem-edit-actions">
+                  <button id="mem-profile-save" class="primary">Save</button>
+                  <button id="mem-profile-cancel" class="ghost">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="profile-side">
+            <div class="panel">
+              <h3>Kept facts <span id="mem-kept-count" class="count">0</span></h3>
+              <p class="hint">Remembered across all your documents. Forget any of them anytime.</p>
+              <ul id="mem-kept" class="mem-kept"></ul>
+            </div>
+            <div class="panel">
+              <h3>Topics</h3>
+              <ul id="mem-topics" class="chips"></ul>
+            </div>
+            <div class="panel">
+              <h3>Share with your Claude sessions</h3>
+              <p class="hint">Optional: link your profile into <code>~/.claude</code> so your other Claude Code sessions can read it too. This writes one line to <code>~/.claude/CLAUDE.md</code>.</p>
+              <button id="mem-sync" class="ghost">Sync to ~/.claude</button>
+              <p id="mem-sync-state" class="hint"></p>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
     <!-- BRIEFING VIEW (the "let's talk about it first" intake) -->
     <main id="view-brief" class="view hidden">
       <section class="brief">
@@ -191,6 +241,15 @@
             <h3>Voice learning</h3>
             <p class="hint">Review what your recent edits could teach this doc's voice. Nothing is saved until you keep it.</p>
             <button id="learn-btn" class="ghost">Learn from my edits</button>
+          </div>
+
+          <div class="panel" id="mem-doc-panel">
+            <h3>Personal memory <a href="#/profile" class="mini" title="Manage what the editor knows about you">manage</a></h3>
+            <p class="hint" id="mem-doc-summary">—</p>
+            <label class="mem-facts-toggle" title="Allow the editor to include known personal facts (names, household, etc.) in THIS document's output">
+              <input type="checkbox" id="mem-use-facts" /> Use my personal facts in this document
+            </label>
+            <p class="hint small">Off: memory only grounds the writing (prevents invented details). On: it may name personal facts where the document calls for them.</p>
           </div>
 
           <div class="panel hidden" id="publish-panel">

@@ -511,6 +511,24 @@ app.post('/api/memory/forget', (req, res) => {
   res.json({ item });
 });
 
+// Edit the canonical profile (USER.md) directly.
+app.put('/api/memory/profile', (req, res) => {
+  memory.writeProfile((req.body && req.body.markdown) || '');
+  res.json({ ok: true });
+});
+
+// Project the profile to ~/.claude so the user's OTHER Claude sessions benefit
+// (Decision A). Consented: only invoked from the Profile tab's explicit button.
+app.post('/api/memory/sync', (req, res) => {
+  try {
+    const r = memory.syncToClaudeDir();
+    if (!r.ok) return res.status(409).json(r); // e.g. a real ~/.claude/USER.md is in the way
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Output skills (skill-driven Export / Publish) -----------------------
 // doc-editor discovers output skills and shells out to their plan/run CLI. The
 // procedure (render/deploy) lives in the skill, never here; the app only knows it

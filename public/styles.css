@@ -105,8 +105,8 @@ button {
 
 /* Layout */
 .view { flex: 1 1 auto; min-height: 0; }
-/* Home & brief: a normal centered, scrollable page. */
-#view-home, #view-brief { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; overflow-y: auto; box-sizing: border-box; width: 100%; }
+/* Home, brief & profile: a normal centered, scrollable page. */
+#view-home, #view-brief, #view-profile { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; overflow-y: auto; box-sizing: border-box; width: 100%; }
 /* Editor: full-width two-pane area; scrolls horizontally only if too narrow. */
 #view-editor { overflow-x: auto; overflow-y: hidden; }
 
@@ -588,3 +588,25 @@ button {
 .learn-text { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 .learn-sub { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin-top: 6px; }
 .learn-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+
+/* Profile / personal memory */
+.profile h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 6px; }
+.profile .sub { color: var(--muted); margin: 0 0 22px; font-size: 15px; max-width: 760px; }
+.profile-cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.profile-main, .profile-side { display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 880px) { .profile-cols { grid-template-columns: 1fr; } }
+
+.mem-queue, .mem-kept { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mem-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--paper); }
+.mem-text { font-size: 14px; line-height: 1.4; }
+.mem-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.mem-actions { margin-top: 8px; display: flex; gap: 8px; }
+.mem-profile { border: 1px solid var(--line); border-radius: 10px; padding: 4px 16px; background: var(--paper); max-height: 460px; overflow-y: auto; }
+.mem-profile h1, .mem-profile h2 { font-size: 16px; margin: 14px 0 6px; }
+.mem-profile h3 { font-size: 14px; margin: 12px 0 4px; }
+.mem-profile ul { margin: 4px 0; padding-left: 20px; }
+.mem-profile li { font-size: 13px; line-height: 1.45; }
+.mem-profile-text { width: 100%; min-height: 360px; resize: vertical; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5; border: 1px solid var(--line); border-radius: 10px; box-sizing: border-box; }
+.mem-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
+.mem-facts-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin: 4px 0; cursor: pointer; }
+.mem-facts-toggle input { margin: 0; }

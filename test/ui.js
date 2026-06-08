@@ -26,6 +26,16 @@ const path = require('path');
 const PORT = process.env.UI_PORT || 9977;
 const BASE = `http://localhost:${PORT}`;
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-'));
+// Isolated personal-memory store, seeded so the Profile view renders queue + kept +
+// profile (and their buttons get measured). CLAUDE dir is temp too, so the sync
+// button can never touch the real ~/.claude even if exercised.
+const MEMTMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-mem-'));
+const CLATMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-cla-'));
+fs.writeFileSync(path.join(MEMTMP, 'USER.md'), '# USER.md\n\n## Work\n- Works in software.\n');
+fs.writeFileSync(path.join(MEMTMP, 'memory.json'), JSON.stringify({ items: [
+  { id: 'm_q1', topic: 'profile', section: 'people', text: 'Has a spouse and one child.', status: 'unsaved', provenance: 'Learned from a planning conversation.', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: null },
+  { id: 'm_k1', topic: 'profile', section: 'work', text: 'Works in software.', status: 'kept', provenance: '', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: '2026-01-02T00:00:00Z' },
+] }, null, 2));
 
 let chromium;
 try { ({ chromium } = require('playwright-core')); }
@@ -91,7 +101,7 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
 (async () => {
   let server, browser;
   try {
-    server = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DOC_EDITOR_DOCS_DIR: TMP }, stdio: 'inherit' });
+    server = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DOC_EDITOR_DOCS_DIR: TMP, DOC_EDITOR_MEMORY_DIR: MEMTMP, DOC_EDITOR_CLAUDE_DIR: CLATMP }, stdio: 'inherit' });
     await waitForServer();
     log('server up on', BASE);
 
@@ -125,6 +135,11 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
       await page.evaluate(setBtn, ['learn-btn', 'Analyzing your edits…', true]);
       record('editor', width, await page.evaluate(audit), { checkPage: full });
 
+      // Profile (personal memory): seeded store -> queue + kept + profile render
+      await page.goto(BASE + '/#/profile', { waitUntil: 'networkidle' });
+      await sleep(300);
+      record('profile', width, await page.evaluate(audit), { checkPage: full });
+
       await page.close();
     }
 
@@ -136,6 +151,6 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
   } finally {
     if (browser) await browser.close().catch(() => {});
     if (server) server.kill();
-    try { fs.rmSync(TMP, { recursive: true, force: true }); } catch {}
+    for (const d of [TMP, MEMTMP, CLATMP]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
   }
 })();

@@ -517,6 +517,20 @@ app.put('/api/memory/profile', (req, res) => {
   res.json({ ok: true });
 });
 
+// View / edit / delete a topic file (the name is sanitized in lib/memory, so no
+// path traversal). Topics are the grow-without-bound facts retrieved per document.
+app.get('/api/memory/topic/:name', (req, res) => {
+  res.json({ name: req.params.name, markdown: memory.readTopic(req.params.name) });
+});
+app.put('/api/memory/topic/:name', (req, res) => {
+  memory.writeTopic(req.params.name, (req.body && req.body.markdown) || '');
+  res.json({ ok: true });
+});
+app.delete('/api/memory/topic/:name', (req, res) => {
+  memory.deleteTopic(req.params.name);
+  res.json({ ok: true });
+});
+
 // Project the profile to ~/.claude so the user's OTHER Claude sessions benefit
 // (Decision A). Consented: only invoked from the Profile tab's explicit button.
 app.post('/api/memory/sync', (req, res) => {

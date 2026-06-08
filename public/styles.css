@@ -616,3 +616,9 @@ button {
 .mem-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
 .mem-facts-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin: 4px 0; cursor: pointer; }
 .mem-facts-toggle input { margin: 0; }
+
+/* Topic chips (clickable) + topic modal */
+.topic-chip { cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+.topic-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.topic-modal-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
+.topic-modal-body .mem-profile-text { min-height: 300px; }

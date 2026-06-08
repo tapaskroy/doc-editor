@@ -158,7 +158,8 @@ Same discipline as the voice store: write-temp-then-rename for `memory.json`, `U
 3. **Retrieval + compose + the guardrail** wired into generate/revise; per-doc toggle.
 4. **Capture** (intake pass + learn-pipeline routing) → unsaved queue.
 5. **Profile tab** (unified): about-you, unsaved queue (keep/discard/forget), chat box, the per-draft "what this draft uses" panel.
-6. **Later:** Haiku-scored retrieval at scale; seeding/onboarding import; then the journal track (separate tab, mobile, BYO-model, sensitivity tiers).
+6. **Topic files CRUD UI:** clickable topic chips in the Profile tab open a modal to view/edit/delete each `topics/<topic>.md` (`GET|PUT|DELETE /api/memory/topic/:name`). Makes the topical tier visible/manageable, parallel to the editable `USER.md`.
+7. **Later:** Haiku-scored retrieval at scale; seeding/onboarding import; routing edit-`context` candidates into memory; then the journal track (separate tab, mobile, BYO-model, sensitivity tiers).
 
 ## 11. Open questions (design-level)
 

@@ -39,6 +39,8 @@ fs.writeFileSync(path.join(MEMTMP, 'USER.md'),
   '## People\n- Has a spouse and one child.\n- Keeps a close circle of college friends.\n\n' +
   '## Work\n- Vice President of a software organization of about two thousand people, owning the common platform layer across many product lines and partnering with product teams to ship and maintain services.\n- Operating philosophy favors decentralized, empowered teams that stay tightly coupled on strategy and loosely coupled on execution.\n\n' +
   '## Taste\n- Enjoys historical and geopolitical nonfiction, and the occasional long essay.\n');
+fs.mkdirSync(path.join(MEMTMP, 'topics'), { recursive: true });
+fs.writeFileSync(path.join(MEMTMP, 'topics', 'travel.md'), '# Travel\n\n- Home base is a large metro area; several trips abroad each year.\n');
 fs.writeFileSync(path.join(MEMTMP, 'memory.json'), JSON.stringify({ items: [
   { id: 'm_q1', topic: 'profile', section: 'people', text: 'Has a spouse and one child.', status: 'unsaved', provenance: 'Learned from a planning conversation.', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: null },
   { id: 'm_k1', topic: 'profile', section: 'work', text: 'Works in software.', status: 'kept', provenance: '', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: '2026-01-02T00:00:00Z' },

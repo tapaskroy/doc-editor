@@ -381,6 +381,25 @@
       </div>
     </div>
 
+    <!-- Topic file viewer/editor (a topical memory file) -->
+    <div id="topic-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong id="topic-modal-title">Topic</strong>
+          <button id="topic-close" class="ghost">Close</button>
+        </div>
+        <div class="topic-modal-body">
+          <p class="hint">A topical memory file. The editor reads it only when it's relevant to the document you're writing.</p>
+          <textarea id="topic-text" class="mem-profile-text" spellcheck="false"></textarea>
+        </div>
+        <div class="modal-foot">
+          <button id="topic-delete" class="ghost">Delete topic</button>
+          <span class="spacer"></span>
+          <button id="topic-save" class="primary">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast hidden"></div>
 
     <script src="/vendor/marked.js"></script>

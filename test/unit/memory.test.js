@@ -73,6 +73,19 @@ test('discard tombstones (and blocks re-propose); forget removes from Markdown',
   assert.doesNotMatch(mem.readProfile(), /Allergic to walnuts\./); // removed from canonical Markdown
 });
 
+test('topic files: write, read, list, delete', () => {
+  mem.writeTopic('travel', '# Travel\n\n- Bali 2025\n');
+  assert.match(mem.readTopic('travel'), /Bali 2025/);
+  assert.ok(mem.listTopics().includes('travel'));
+  assert.equal(mem.deleteTopic('travel'), true);
+  assert.ok(!mem.listTopics().includes('travel'));
+  assert.equal(mem.readTopic('travel'), ''); // gone
+  assert.equal(mem.deleteTopic('nope'), false); // missing -> false
+  // name is sanitized (no path traversal)
+  mem.writeTopic('../evil', 'x');
+  assert.ok(!fs.existsSync(path.join(MEM, '..', 'evil.md')));
+});
+
 test('retrieve returns the always-on profile plus relevant topics only', () => {
   mem.writeProfile('# USER.md\n\n## Identity\n- Tester.\n');
   mem.writeTopic('travel', '# Travel\n\n- Home base is the Bay Area; recent trip to Bali and Mount Batur.\n');

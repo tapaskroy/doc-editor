@@ -1904,7 +1904,7 @@ function renderMemory(data) {
     : '<li class="hint">No facts kept yet.</li>';
 
   $('#mem-topics').innerHTML = (data.topics || []).length
-    ? data.topics.map((t) => `<li class="chip">${escapeHtml(t)}</li>`).join('')
+    ? data.topics.map((t) => `<li class="chip topic-chip" data-topic="${escapeHtml(t)}" title="View or edit this topic">${escapeHtml(t)}</li>`).join('')
     : '<li class="hint">none</li>';
 
   $('#mem-profile-view').innerHTML = data.profile ? mdToHtml(data.profile) : '<p class="hint">No profile yet. Keep a fact, or click edit to write one.</p>';
@@ -1923,7 +1923,43 @@ function renderMemory(data) {
   $('#mem-kept').querySelectorAll('.mem-item').forEach((li) => {
     li.querySelector('.mem-forget').addEventListener('click', () => act('/api/memory/forget', li.dataset.id));
   });
+  $('#mem-topics').querySelectorAll('.topic-chip').forEach((li) => {
+    li.addEventListener('click', () => openTopic(li.dataset.topic));
+  });
 }
+
+// Topic file viewer/editor (step 6): click a topic chip to read/edit/delete it.
+let currentTopic = null;
+async function openTopic(name) {
+  try {
+    const r = await api.json(`/api/memory/topic/${encodeURIComponent(name)}`);
+    currentTopic = name;
+    $('#topic-modal-title').textContent = 'Topic: ' + name;
+    $('#topic-text').value = r.markdown || '';
+    $('#topic-modal').classList.remove('hidden');
+    $('#topic-text').focus();
+  } catch (e) { toast('Could not open topic: ' + e.message); }
+}
+$('#topic-close').addEventListener('click', () => $('#topic-modal').classList.add('hidden'));
+$('#topic-modal').addEventListener('click', (e) => { if (e.target.id === 'topic-modal') $('#topic-modal').classList.add('hidden'); });
+$('#topic-save').addEventListener('click', async () => {
+  if (!currentTopic) return;
+  try {
+    await api.json(`/api/memory/topic/${encodeURIComponent(currentTopic)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: $('#topic-text').value }) });
+    toast('Topic saved');
+    $('#topic-modal').classList.add('hidden');
+    showProfile();
+  } catch (e) { toast('Could not save: ' + e.message); }
+});
+$('#topic-delete').addEventListener('click', async () => {
+  if (!currentTopic) return;
+  try {
+    await api.json(`/api/memory/topic/${encodeURIComponent(currentTopic)}`, { method: 'DELETE' });
+    toast('Topic deleted');
+    $('#topic-modal').classList.add('hidden');
+    showProfile();
+  } catch (e) { toast('Could not delete: ' + e.message); }
+});
 
 // Static profile controls (wired once).
 $('#mem-profile-edit').addEventListener('click', () => {

@@ -30,7 +30,7 @@ generation ◄─ memory.compose(retrieve(doc))  +  verbatim intake block       
 ```
 $DOC_EDITOR_MEMORY_DIR            # default ~/.config/doc-editor/memory/ — neutral, user-owned, NOT in the git repo
   USER.md                          # curated, sectioned profile (the always-on core). Human-editable. Portable.
-  memory/<topic>.md                # topical files that grow: travel.md, work.md, taste-film.md, …
+  topics/<topic>.md                # topical files that grow: travel.md, taste.md, … (named topics/ to avoid memory/memory/)
   memory.json                      # thin metadata manifest (NOT the content; see 2.3)
 ```
 
@@ -82,7 +82,7 @@ All writes are **write-temp-then-rename** (atomic), same as `voicestore.js`/`mai
 ## 3. The memory model (tiers)
 
 - **`USER.md` — the always-on core.** Small, sectioned: identity, people (relationships/names), work, languages, durable preferences, and a **Privacy boundaries** section (hard "never put X in an output" rules). Injected on every generate (it is meant to stay small).
-- **Topical files — retrieved by relevance.** `memory/<topic>.md` for areas that grow (travel, work, taste-film/-music). Only the relevant ones reach a given prompt (Q5).
+- **Topical files — retrieved by relevance.** `topics/<topic>.md` for areas that grow (travel, taste, work). Only the relevant ones reach a given prompt (Q5).
 - **Journal — deferred** (its own tab, higher privacy bar, mobile; do what Obsidian can't). Not in v1.
 
 ## 4. Capture (Q3: passive, no in-flow prompts)

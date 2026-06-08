@@ -1,223 +1,199 @@
 # doc-editor: Personalization Design (Architecture)
 
-*How the personalization system is built. Companion to [`../specs/personalization-spec.md`](../specs/personalization-spec.md) (which holds the locked product decisions) and [`../specs/vision.md`](../specs/vision.md). Status: design, pre-implementation. Section 9 lists the open questions and ambiguities to resolve before building.*
+*How the personalization system is built. Companion to [`../specs/personalization-spec.md`](../specs/personalization-spec.md) (locked product decisions) and [`../specs/vision.md`](../specs/vision.md). Status: design, **reworked 2026-06-08** after an architecture review (verdict: REWORK) and the Bali retry-loop finding. Section 9 lists what remains open; everything the review marked "must address" is resolved inline.*
 
 ## 1. Overview
 
-Three subsystems on top of the existing app:
+Three subsystems plus a feedback channel, on top of the existing app:
 
-1. **Voice store** — the read-write profile format (`SKILL.md` + `voice.json`) and the
-   functions that read, compose, and update it. Extends `lib/skills.js`.
-2. **Learn pipeline** — turns edit-diffs (and imported corpora) into reviewable candidate
-   lessons. New `lib/learn.js` plus `lib/importers/*`. Reads `lib/versions.js`.
+1. **Voice store** — the read-write profile (`SKILL.md` + `voice.json`) and the functions
+   that read, compose, and update it. A **thin `lib/voicestore.js` beside
+   `lib/skills.js`** (the discovery seam stays read-only, per the review). Phase 1
+   shipped a first cut inside `lib/skills.js`; step 2 extracts it.
+2. **Learn pipeline** — edit-diffs (and imports) → failure-episode guard → classify →
+   accumulate → candidates. `lib/learn.js` + `lib/importers/*`, reading `lib/versions.js`.
 3. **Awareness surface** — the ambient editor badge and the Voice tab where the user
-   reviews, approves, and manages. New routes in `server.js`, new UI in `public/`, reusing
-   the review-gate modal.
+   reviews and manages. New routes + a **generic** review surface (the Mail gate is wired
+   to Mail state, not reusable as-is).
+4. **Feedback channel** — where Claude-corrections go (baseline quality rules + a guardrail/
+   bug log), kept physically separate from voices so failures never become personality.
 
-Data flows one way into a voice, always through the gate:
+One-way flow, always through the gate:
 
 ```
-edits / imports  ->  candidates (classified, scored)  ->  review gate  ->  voice store
-   (versions.js,        (lib/learn.js,                     (Voice tab /      (SKILL.md +
-    importers)           a Claude analysis pass)            editor badge)     voice.json)
-                                                                   |
-                                       generation reads <----------+
-                                  (composed system prompt: baseline + voice + active rules)
+edits / imports ─► failure-episode guard ─► classify ─► accumulate ─► review gate ─► voice.json (voice/context)
+ (versions.js,       (lib/learn.js)          (Haiku)     (cross-doc                 └► feedback channel
+  importers)                                              confidence)                  (baseline rule / bug log)
+                                                                       generation reads ◄─ compose() from voice.json
 ```
 
 ## 2. Data model
 
-### 2.1 A voice (a skill folder)
+### 2.1 A voice (single source of truth)
 
 ```
 ~/.claude/skills/<voice-id>/
-  SKILL.md      # human + portable: frontmatter (name, description) + preamble + a
-                # managed "## Learned rules" section listing ACTIVE rules in prose
-  voice.json    # app-managed metadata (NOT read by other Claude Code instances)
+  SKILL.md    # human PREAMBLE + a regenerated, READ-ONLY "## Learned rules" block
+  voice.json  # AUTHORITATIVE for rules + metadata
 ```
 
-`voice.json` (sketch):
+`voice.json` is authoritative. `SKILL.md`'s learned block is a deterministic render of the
+active rules, present only so other Claude Code instances see them (portability). The
+preamble is the only human-owned part. **`compose()` builds the injected prompt from the
+preamble plus the active rules in `voice.json`** (not by reading the block back), so there
+is one owner. (Resolves review finding "two sources of truth" and 9.6.)
 
 ```json
 {
   "id": "blog",
-  "baseOf": null,
-  "rules": [
-    {
-      "id": "r_8f2",
-      "text": "Cut intensifiers like 'very' and 'really'.",
-      "layer": "voice",            // voice | context
-      "status": "active",          // active | suggested | dismissed | retired
-      "confidence": 0.82,
-      "support": ["20260606-rev3#d2", "20260601-rev1#d5"],  // edit/source refs
-      "createdAt": "…", "lastSeenAt": "…",
-      "source": "edits"            // edits | docs | sent-mail | whatsapp | taste
-    }
-  ]
+  "lastReviewedAt": "…",          // drives the "N since last review" badge
+  "rules": [{
+    "id": "r_8f2",
+    "observation": "You replace 'utilize' with 'use'.",  // human-readable; kept for the tab summary
+    "text": "Prefer 'use' over 'utilize'.",              // the injected instruction
+    "layer": "voice",            // voice | context
+    "status": "suggested",       // suggested | active | dismissed | retired
+    "confidence": 1,
+    "support": ["doc:20260606-…#rev3"],  // refs for OWN docs; abstract counts for sensitive sources
+    "source": "edits",           // edits | docs | sent-mail | whatsapp | taste
+    "createdAt": "…", "updatedAt": "…"
+  }]
 }
 ```
 
-- The **portable** truth is `SKILL.md`. Its "Learned rules" section is rendered from the
-  `active` rules in `voice.json`; `voice.json` is the source of metadata, `SKILL.md` is the
-  source of injected prose. Keeping the two in sync is a named risk (section 9).
-- **Context** lives as `layer: "context"` rules (or a sibling `context.json`, open question
-  9.4). Context is facts, not style, so it is composed into the prompt differently
-  (section 5).
+### 2.2 Candidate → rule (explicit transform, per the review)
 
-### 2.2 Candidate lesson (shared shape)
+Producers emit one shape; the accumulator maps it to a rule. Field mapping is now explicit
+and **`observation` is preserved** so the Voice tab summary can be reconstructed:
 
-Every producer (edit loop and each importer) emits the same shape, so the review gate and
-accumulator are source-agnostic:
+| candidate | rule |
+|---|---|
+| `observation` | `observation` (kept) |
+| `target` | `layer` |
+| `proposedText` | `text` |
+| `sourceType` | `source` |
+| `evidence[]` | `support[]` (see retention policy) |
+| `confidence` | `confidence` (recomputed on accumulate) |
 
-```json
-{
-  "observation": "You replace 'utilize' with 'use'.",
-  "target": "voice",
-  "proposedText": "Prefer 'use' over 'utilize'.",
-  "evidence": [{ "before": "…", "after": "…", "ref": "…" }],
-  "confidence": 0.4,
-  "sourceType": "edits"
-}
-```
+### 2.3 Evidence retention (resolves the discard contradiction)
 
-### 2.3 Per-document voice
+- **Own documents (edits, docs importer):** `support` holds *refs* into version history
+  (`doc:id#vid`), not copies. Cheap, auditable, the user's own content.
+- **Sensitive sources (sent-mail, whatsapp, taste):** the importer **strips verbatim
+  evidence at its boundary** and stores only abstract provenance (`{ source, count, date }`).
+  No private snippets ever reach `voice.json`. This is what makes "distil and discard" true.
 
-`docs/<id>.meta.json` gains `voice: "<voice-id>"` (kind-agnostic; works for docs and
-emails). New docs inherit the default voice. Generation and the learn loop both read it.
+### 2.4 Per-document voice + attribution
 
-## 3. The learn pipeline (`lib/learn.js`)
+`docs/<id>.meta.json` carries `voice` (Phase 1, done). Additionally, **each AI snapshot in
+`lib/versions.js` stores the voice that produced it** (`versions.add` gains a `voice`
+field). The learn pipeline attributes an edit to the voice of the snapshot it corrects, so
+mid-document voice switching is a lookup, not a guess (resolves 9.10).
 
-1. **Collect diffs.** From `lib/versions.js`, pair each `ai` snapshot with the `manual`
-   edits that followed it (what Claude wrote vs what the user kept), plus any comment text
-   attached to that revision. This is the labeled signal.
-2. **Classify + infer (one Claude analysis pass, `--tools none`).** Feed a batch of
-   `(before, after, comment)` triples; the model returns candidates in the 2.2 shape,
-   each labeled `voice`, `context`, or dropped as noise (typos, reorderings). Reuse the
-   `firstJsonObject` / sterner-retry pattern from `lib/claude.js`. This is analysis, not
-   writing, so it carries no voice skill itself.
-3. **Accumulate.** Match each candidate against existing rules (semantic dedup, open
-   question 9.2). A match bumps `support` and `confidence`; a new one is created
-   `status: "suggested"`. Confidence is a function of independent supporting edits over
-   time.
-4. **Surface.** The ambient badge counts `suggested` (and changed) rules since the last
-   review. The Voice tab lists them with evidence.
-5. **Apply / dismiss.** On approval: `status: "active"`, re-render the `SKILL.md` Learned
-   rules section. On dismiss: `status: "dismissed"` so it does not resurface.
-6. **Decay.** When later edits contradict an active rule, lower its confidence; below a
-   threshold demote to `suggested` or `retired`. Contradiction detection is open (9.3).
+## 3. Trust boundary (where data physically goes)
 
-Trigger: on-demand in v1 (decision 3). Computation can run in a background task after an
-edit burst so the badge is ready, but nothing surfaces unprompted.
+The classify/learn pass and every importer run through the user's **own `claude` CLI**, the
+same channel drafting and revision already use: it reaches Anthropic under the user's own
+subscription, **no other third party, no new key**. Nothing is sent to any server the app
+controls. Chat/mail importers redact other participants before the pass. A local model is a
+future option, not v1. The consent step for any import states this plainly. (Resolves the
+review's top finding.)
 
-## 4. Importers (`lib/importers/*`)
+## 4. The learn pipeline (`lib/learn.js`)
 
-Contract: `import(input, opts) -> candidate[]` in the 2.2 shape, then the same gate.
+1. **Collect.** Walk a doc's ordered snapshots; pair each `ai` snapshot with the `manual`
+   edits that follow it (and any comment text). Attribution voice = the snapshot's stored
+   `voice` (2.4).
+2. **Failure-episode guard (step 0, per the Bali finding).** Detect retry loops: ≥2 edits to
+   the same span in one session each superseding the last, and/or correction language in the
+   comments. Collapse to one episode, route to the feedback channel (section 6), and
+   **exclude from voice-confidence**.
+3. **Classify + dedup in one Haiku pass** (`--tools none`). Input: a batch (heuristic
+   pre-filter drops whitespace/typo/tiny/reorder; cap ~40, surface "and N more") of
+   `(before, after, comment)` plus the voice's existing rules. Output candidates tagged
+   `voice | context | claude-correction | noise`, each either `matches r_X` (dedup) or new.
+   The prompt explicitly separates "stable preference" from "correcting your mistake."
+4. **Accumulate.** Matches bump `confidence` **only on independent cross-document
+   corroboration** (a retry chain is one observation). New items are `suggested`.
+5. **Review + apply.** Through the gate; voice/context lessons write to `voice.json` (then
+   regenerate the SKILL.md block); `claude-correction` items go to the feedback channel.
+6. **Decay.** Deferred (section 9).
 
-- **docs** — read a folder or pasted samples; a Claude pass derives voice candidates and,
-  for cold start, can draft the whole `SKILL.md` preamble. Keep-locally allowed.
-- **sent-mail** — pull the user's sent messages via the existing `lib/mail`; derive a
-  professional-register voice. Distil and discard.
-- **whatsapp** — parse the export (`.txt`/`.zip`), keep only the user's own lines
-  (matched by display name), derive a casual voice. Distil and discard; never learn other
-  participants.
-- **taste (experimental)** — parse Netflix/Spotify export files into low-weight persona
-  candidates (`sourceType: "taste"`), voice-only, never factual.
+Trigger: on-demand in v1; compute may run in a background task so the badge is ready.
 
-## 5. Prompt composition (how a voice reaches generation)
+## 5. Prompt composition
 
-The writing system prompt is composed, in order:
+`compose()` = global baseline (`ANTI_TIC_NOTE`) + voice preamble + **active rules from
+`voice.json`** + relevant context. Resolved rules from the review:
 
-```
-GLOBAL BASELINE (ANTI_TIC_NOTE: no em dashes, precision, etc.)
-  + selected voice preamble (SKILL.md)
-  + active high-confidence learned rules (voice layer)
-  + relevant context (context layer)        <- see open question 9.4
-```
+- **Intra-layer conflict:** higher `confidence` wins, then recency. Deterministic.
+- **Over the token budget:** prefer **merging/summarizing** clustered rules into denser
+  prose; if still over, drop deterministically (lowest-confidence last) and **show the drop
+  in the Voice tab** so an approved rule never silently stops applying.
 
-- Conflict resolution: later (more specific) layers win; the baseline is the floor.
-- Size budget: the active-rules set must stay within a token ceiling; lowest-confidence
-  active rules are trimmed first (open question 9.5).
-- This composition replaces today's single `styleNote(style)` injection in
-  `lib/claude.js`.
+## 6. The feedback channel
 
-## 6. Server and UI
+`claude-correction` candidates never touch a voice. They split into:
+- **baseline quality rule** — a recurring stylistic mistake (em-dash precedent) → the global
+  baseline shared across voices.
+- **guardrail / bug** — hallucination, ignored instruction, broken formatting → a feedback
+  log (`feedback.json` or similar) with consequences: prompt guardrails or a bug/capability
+  backlog. Surfaced separately from the Voice tab.
 
-- **Routes:** `GET /api/voices`, `POST /api/voices` (create/clone), `PUT/DELETE
-  /api/voices/:id`, `POST /api/voices/:id/default`; `GET /api/voices/:id/pending`
-  (proposed lessons), `POST /api/voices/:id/lessons/apply|dismiss`; `POST
-  /api/voices/:id/import`; `PUT /api/docs/:id/voice`.
-- **Voice tab** (`#/voice`): a third surface beside Docs and Mail. Summary at top
-  (Claude's plain-language "what I noticed"), then proposal cards with before/after
-  evidence and keep/edit/dismiss, then voice management (list, create, clone, default,
-  delete) and the About-me context section.
-- **Ambient badge:** a small indicator in the editor sidebar showing pending count, linking
-  to the tab. Reuses the existing modal styles for any inline confirm.
+## 7. Server, UI, and verified reuse
 
-## 7. Reuse of existing seams
+- **Routes:** voice CRUD; `propose` (from edits/import) → candidates; `apply`/`dismiss`;
+  feedback list. Per-doc voice route shipped in Phase 1.
+- **Voice tab** + **ambient badge**; a **generic** review surface built fresh.
+- **Reuse, verified (per the review's instruction):**
+  - `lib/versions.js` — `add/list/get/previous/diffPair` exist; snapshots carry
+    `kind/model/usd/at`. Pairing ai→following-manual is a **list walk** (no built-in
+    helper); `add` must gain a `voice` field. ✔ with a small extension.
+  - `lib/claude.js` — `firstJsonObject` and `runTurn` exist but are **not exported**. Phase 2
+    adds a stateless JSON `analyze()` export. ✗→fix.
+  - Review gate — Mail's is wired to Mail state; **not** directly reusable. Build a generic
+    confirm surface. ✗→build.
+  - `docs/<id>.meta.json` already per-document; per-doc voice extends it. ✔
 
-- `lib/versions.js` is the diff source (no new capture).
-- `lib/skills.js` already discovers and reads skills; extend it rather than replace.
-- The Claude analysis pass mirrors `toDeck` / the injected `deckBuilder`: a stateless
-  JSON-returning call, kept out of `lib/export`-style modules.
-- The review gate mirrors Mail and publishing: one confirm surface, nothing acts without it.
-- Writing and analysis both run `--tools none`; importers read local files on the server
-  side, not via model tools.
+## 8. Concurrency and atomic writes
 
-## 8. Build order
+Background regeneration writes `SKILL.md`/`voice.json` while other Claude Code instances may
+read and the user may hand-edit. All writes are **write-temp-then-rename** (atomic). A reader
+that catches a half-update sees either the old or new file, never a torn one. The preamble is
+preserved across regenerations; only the managed block is replaced.
 
-1. Voice store (two-file format, read/compose/update, per-doc voice) and migrate the
-   current Style picker onto it.
-2. Learn pipeline (collect, classify, accumulate) with the Voice tab review of suggestions,
-   suggest-only.
-3. Ambient editor badge.
-4. Cold-start docs importer, then sent-mail importer.
-5. Decay, baseline promotion, the context section.
-6. Later: WhatsApp, taste, auto-nudge, auto-apply.
+## 9. External dependencies (flagged, per the review)
 
-## 9. Open questions and ambiguities
+- WhatsApp `.zip`/`.txt` export parsing — fragile, format not controlled; behind the
+  (deferred) WhatsApp importer.
+- Netflix/Spotify export parsers — fragile, back the experimental, low-value taste feature;
+  deferred, and possibly not worth a place in this design yet.
+- Embeddings for dedup — **avoided in v1** (we use normalized-text + in-pass model judgment).
+  Revisit only if existing text-similarity infra can be reused.
 
-These are unresolved at the design level and worth settling before or early in the build.
+## 10. Build order (revised)
 
-1. **Classification cost and reliability.** Step 3.2 is a Claude pass per batch of edits.
-   How big a batch, how often, and what does it cost on a busy week? Is a cheap heuristic
-   pre-filter (drop tiny/typo diffs) enough to keep the model pass small? Which model and
-   effort?
-2. **Semantic dedup.** How do we decide a new candidate is "the same rule" as an existing
-   one, to bump confidence rather than create a duplicate? Embeddings, a model judgment, or
-   simple normalized-text matching? Getting this wrong fragments a voice or merges distinct
-   rules.
-3. **Decay and contradiction.** What counts as an edit "contradicting" an active rule, and
-   how fast should confidence fall? Without this, voices ossify or drift. Needs a concrete
-   rule, not just the intent.
-4. **Context: representation and use.** The spec splits voice and context, but how context
-   is *used* in generation is underspecified. Is it a small always-on profile, or retrieved
-   per document by relevance? Where stored (rules in `voice.json` vs a separate
-   `context.json`, possibly shared across voices since facts are not voice-specific)? This is
-   the biggest ambiguity.
-5. **Prompt budget and conflicts.** As active rules accumulate, the injected prompt grows.
-   What is the token ceiling, how do we trim, and how do we resolve two rules that disagree?
-6. **SKILL.md / voice.json sync.** `SKILL.md` is the portable injected artifact; `voice.json`
-   is the metadata. If the user hand-edits `SKILL.md`, or another Claude Code instance does,
-   how do the two reconcile? Proposed: `SKILL.md` "Learned rules" section is machine-owned and
-   regenerated, the preamble is human-owned, but the boundary needs to be unambiguous and
-   safe.
-7. **Per-document voice migration.** Existing docs have no `voice` field. Assign the default
-   on first open, or leave unset and treat unset as default? Does changing a doc's voice
-   retroactively re-attribute its past edits?
-8. **Cross-instance portability vs metadata.** Other Claude Code instances read `SKILL.md`
-   and ignore `voice.json`. That is fine for *using* a voice, but they cannot *learn* into it.
-   Is that acceptable for v1 (only doc-editor writes), or do we want a portable learn format
-   later?
-9. **Cold-start quality bar.** How good must the first drafted voice be (from pasted samples)
-   to be worth keeping? What is the minimum corpus, and what does the tool say when the sample
-   is too thin to infer a voice?
-10. **Attribution when voices are switched mid-document.** If the user drafts under "Blog,"
-    switches to "Casual," and edits, which voice should those edits teach? Last-active-at-edit,
-    or the doc's current voice?
-11. **"Forget" semantics.** When the user forgets a context fact or a rule, is it suppressed
-    (kept as dismissed so it never resurfaces) or truly deleted (and may be re-learned later)?
-    Privacy argues for true delete; usefulness argues for tombstoning. Likely needs both, user
-    choice.
-12. **WhatsApp "self" detection.** Identifying the user's own messages in an export depends on
-    a display name that may be ambiguous or change. How do we confirm we are learning the right
-    person's lines?
+1. **Extract the voice store** into `lib/voicestore.js`; make `compose()` authoritative from
+   `voice.json` (step 2 of the current plan).
+2. **Learn pipeline** (collect → failure guard → classify/dedup → accumulate), now that
+   classification (8) and dedup (9) are locked. Add `claude.analyze()` and the snapshot
+   `voice` stamp first.
+3. **Generic review surface + feedback channel.**
+4. **Voice tab + ambient badge.**
+5. **Cold-start docs importer**, then sent-mail.
+6. **Later:** WhatsApp; baseline promotion; decay + the context representation; taste.
+
+## 11. Open questions (remaining)
+
+Resolved and moved to spec section 12: trust boundary, discard/evidence, single source of
+truth, classification cost/model, dedup, attribution, conflict/budget. Still open:
+
+1. **Decay and contradiction (deferred).** What counts as an edit "contradicting" an active
+   rule, and how fast confidence falls. Lands with the context phase.
+2. **Context representation and use (deferred, the big one).** Always-on profile vs retrieval;
+   storage (rules in `voice.json` vs a shared `context.json` since facts are not voice-specific).
+3. **Cold-start quality bar.** Minimum corpus to infer a voice; what to say when too thin.
+4. **Forget semantics.** Dismiss (tombstone) vs delete (hard, may re-learn); hard-delete by
+   default for context facts.
+5. **3.1 assumption to validate:** that post-snapshot edits are mostly style. The Bali case
+   shows they often are not; validate against real diffs as the pipeline comes up.

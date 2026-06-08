@@ -78,7 +78,9 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/docs', async (req, res) => {
   const { premise = '', intake, intakeUsage, model, effort, kind, email, voice } = req.body || {};
-  let meta = docs.create(premise, { kind, email, voice });
+  // Persist the raw planning transcript on the doc so generation can ground on it
+  // verbatim (and revise on a distilled summary of it) — see hybrid C.
+  let meta = docs.create(premise, { kind, email, voice, intake });
   // Carry over the cost of the briefing interview turns (run before the doc existed).
   if (Array.isArray(intakeUsage) && intakeUsage.length) {
     meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', requested: model || '', ...u })));
@@ -258,7 +260,7 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
 app.get('/api/docs/:id/generate', (req, res) => {
   const { id } = req.params;
   if (!docs.exists(id)) return res.status(404).end();
-  const { premise, brief, attachments: atts = [], kind, email, voice } = docs.readMeta(id);
+  const { premise, brief, attachments: atts = [], kind, email, voice, intake } = docs.readMeta(id);
   const { model, effort } = req.query;
   let web = req.query.web === 'true';
   // Per-document voice takes precedence; the ?skill= query is a legacy fallback.
@@ -266,6 +268,10 @@ app.get('/api/docs/:id/generate', (req, res) => {
   const style = voiceId ? voicestore.compose(voiceId) : null;
   const references = attachments.referenceBlock(id, atts);
   const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
+  // Regenerating produces fresh document text, so any distilled context summary is
+  // now potentially stale — clear it so the next revise re-distills (the freshness
+  // rule for hybrid C).
+  if (op === 'regenerate') docs.setContextSummary(id, null);
   // A briefed doc generates from its structured brief; otherwise from the premise.
   let genPrompt = brief ? claude.briefToPrompt(brief) : premise;
 
@@ -299,6 +305,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     style,
     references,
     kind,
+    intake,
     addDir: references ? attachments.docDir(id) : null,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),
@@ -368,11 +375,27 @@ app.post('/api/docs/:id/revise', async (req, res) => {
 
   try {
     const markdown = docs.getMarkdown(id);
-    const { history = [], attachments: atts = [], voice } = docs.readMeta(id);
+    const { history = [], attachments: atts = [], voice, intake, contextSummary } = docs.readMeta(id);
     const voiceId = voice || skill || null;
     const style = voiceId ? voicestore.compose(voiceId) : null;
     const references = attachments.referenceBlock(id, atts);
-    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
+    // Hybrid C: ground revisions on a distilled summary of the planning transcript
+    // (never the raw transcript). Compute it once, lazily, then reuse until a
+    // regenerate clears it.
+    let summary = contextSummary;
+    if (!summary && Array.isArray(intake) && intake.length) {
+      try {
+        const { summary: s, usage: du } = await claude.distillContext(intake);
+        if (s) {
+          docs.setContextSummary(id, s);
+          docs.addUsage(id, { op: 'distill', requested: 'haiku', ...du });
+        }
+        summary = s;
+      } catch (e) {
+        console.error('distillContext failed:', e.message);
+      }
+    }
+    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, contextSummary: summary, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);

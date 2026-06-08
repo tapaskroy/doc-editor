@@ -115,10 +115,14 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
      (`{title, summary, audience, purpose, tone, targetWords, keyPoints, structure}`),
      stored on the doc; the brief's `summary` becomes the premise (so history /
      the conversation panel reflect it). `targetWords` is derived from any
-     length/reading-time the user gave (~500 words/page, ~225 wpm).
+     length/reading-time the user gave (~500 words/page, ~225 wpm). The **raw
+     transcript is also persisted on the doc as `intake`** (the brief is lossy; the
+     transcript is the ground truth — see "Doc-specific context" below).
   3. Generation: if the doc has a `brief`, the route generates from
      `claude.briefToPrompt(brief)` (explicit constraints) instead of the bare
-     premise.
+     premise. If the doc has an `intake` transcript, it is **also passed to
+     `generate()` verbatim** ("conversation that shaped this document") so the
+     first draft never re-loses specifics the brief compressed away (the Bali bug).
   4. Length check is **client-side**: `updateLength()` counts words from the
      Markdown, shows "≈N words · ~M min", and — when a `targetWords` exists and
      actual is off by >15% — offers Expand/Trim, which is just a `revise()` call
@@ -268,6 +272,24 @@ pulled it back into prose mode and broke JSON parsing. Keeping the edit call
 reliable structured output and real memory. Don't reintroduce `--resume` for the
 revise path without solving that drift.
 
+### Doc-specific context (the "Bali fix", hybrid C)
+
+The compiled `brief` is lossy — it once dropped who-travelled facts the user stated
+in the planning conversation, so the draft fabricated them. The fix splits by path,
+because generate and revise have different constraints:
+
+- **`meta.intake`** stores the raw planning transcript. Generation gets it
+  **verbatim** (no JSON-mode risk in a streaming prose call), so the first draft has
+  the user's exact words.
+- **Revise must never see the raw transcript** (same drift reason as `--resume`
+  above). Instead `claude.distillContext(intake)` (Haiku) produces a compact,
+  fact-preserving **`meta.contextSummary`**, fed to `revise()` as grounding-only
+  BACKGROUND. It's computed lazily on the first revise and **cleared on regenerate**
+  (`docs.setContextSummary(id, null)`) so it re-distills against fresh text.
+
+This is step 1 of the personal-memory work (`specs/personal-memory-spec.md`,
+`design/personal-memory-design.md`); the durable cross-document layer comes next.
+
 The reviser also has a tolerant JSON extractor (handles stray text / code fences)
 and a single sterner retry, as belt-and-suspenders against occasional drift.
 
@@ -414,6 +436,8 @@ recent Primary threads (provider-agnostic; Gmail `in:inbox category:primary`).
   "title": "Derived from the first H1",
   "premise": "the original request",
   "history": [{ "role": "user", "content": "…" }],
+  "intake": [{ "role": "user", "content": "…" }],   // raw planning transcript, or null
+  "contextSummary": "distilled facts from intake, for revise (lazy; cleared on regenerate)",
   "createdAt": "ISO", "updatedAt": "ISO"
 }
 ```

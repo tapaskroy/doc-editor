@@ -36,13 +36,25 @@ $DOC_EDITOR_MEMORY_DIR            # default ~/.config/doc-editor/memory/ — neu
 
 Markdown is the **canonical content** — open format, the user owns it, takeable to any tool or model. `memory.json` is auxiliary metadata, never the source of the facts themselves (avoids the split-brain we hit with `voice.json`/`SKILL.md`: there, JSON was authoritative; here, the *Markdown* is authoritative for content, JSON only annotates it).
 
-### 2.2 Projection into `~/.claude/` — for *other* Claude instances
+### 2.2 Projection into `~/.claude/` — for *other* Claude instances (mechanism VERIFIED, Claude Code 2.1.168)
 
-A projection step keeps `~/.claude/` pointing at the canonical so the user's *regular* CLI sessions benefit: **symlink preferred** (`~/.claude/USER.md` → `$DOC_EDITOR_MEMORY_DIR/USER.md`, and `~/.claude/memory/` → the topical dir), **copy as fallback** when symlinks aren't viable. Because Claude Code auto-loads `~/.claude/CLAUDE.md` (and its `@import`s) but not an arbitrary `USER.md`, the projection also ensures a single `@USER.md` import line exists in `~/.claude/CLAUDE.md`. *(Sub-detail to verify against current Claude Code memory-loading rules — see 11.)*
+Verified behavior (docs + `claude --help`, v2.1.168):
 
-**Key architectural point:** doc-editor does **not** consume memory via this projection. Its own writing spawns run in a neutral `RUN_DIR` precisely to avoid auto-loading `CLAUDE.md` (the 7–23× cost blow-up, CLAUDE.md "load-bearing"). So doc-editor reads the canonical files **directly** and injects **only the retrieved slice** (lean, controlled — Q5). The `~/.claude/` projection exists solely so external Claude instances get the benefit. The two never fight: one path is explicit injection, the other is auto-load, and they read the same canonical bytes.
+- Claude Code auto-loads only **`CLAUDE.md` / `CLAUDE.local.md`** as memory (managed → user `~/.claude/CLAUDE.md` → project → local). An arbitrary **`~/.claude/USER.md` is NOT auto-loaded.**
+- It supports **`@path` imports** inside `CLAUDE.md` (relative resolves to the importing file; `@~/...` home-expansion works; up to 4-hop recursion; a one-time approval dialog on first external import).
+- Therefore the documented way to make a profile load in **all interactive sessions** is an **`@USER.md` import line inside `~/.claude/CLAUDE.md`** (option b). There is no `~/.claude/CLAUDE.md` on this machine today, so the projection step creates it.
 
-Seeding is **deferred** (Q6): v1 starts empty and learns from day one. No OpenClaw import in v1; no write-back ever.
+**Projection step:** symlink the canonical `USER.md` → `~/.claude/USER.md` (copy fallback), and **idempotently ensure an `@USER.md` import exists in `~/.claude/CLAUDE.md`** (create the file with that one line + a marker comment if absent; append if present, never clobber existing user content).
+
+**The correction this verification forced (important).** `claude -p` with `--system-prompt`, run in a neutral `RUN_DIR`, **still auto-loads `~/.claude/CLAUDE.md`** — `RUN_DIR` only avoids the *project* CLAUDE.md (the documented 7–23× cost blow-up), **not the user-level one**. So the instant we create `~/.claude/CLAUDE.md`+`@USER.md` for other sessions, doc-editor's *own* writing calls would auto-load the **entire profile** — re-bloating every call's cache-creation **and bypassing the leakage guardrail** (the profile would enter the prompt without the grounding/don't-volunteer wrapper and without the per-doc toggle).
+
+**Fix:** doc-editor's **writing spawns add `--bare`** (verified: "skip hooks, LSP, plugin sync, attribution, auto-memory, and CLAUDE.md auto-discovery", while still honoring `--system-prompt`, `--tools`/`--allowedTools`, `--add-dir`, `--settings`). Memory then enters doc-editor **only** through the controlled `memory.compose()` injection (lean, retrieval-scoped, guardrailed — Q5/§5.2). This *strengthens* the existing `RUN_DIR` protection rather than replacing it.
+
+- **Apply `--bare` to:** generate, revise, analyze, distill, interview, compileBrief, toDeck (all `--tools none`/web; voice is injected explicitly, so skipped skill auto-discovery is fine).
+- **Do NOT apply `--bare` to mail spawns** — they depend on MCP auto-discovery. Consequence: once `~/.claude/CLAUDE.md` exists, mail calls *will* auto-load the profile (extra cost; guardrail not applied to drafted mail). Flagged as a v1 follow-up (§11.6): either pass `--bare --mcp-config` to mail, or accept profile grounding for mail and apply the guardrail there explicitly.
+- **Implementation gate:** a smoke test must confirm `--bare` preserves subscription auth (`apiKeySource: none`), `--tools`/web, and `--add-dir` attachments before this ships.
+
+Seeding is **deferred** (Q6): the *productized* onboarding/import for general users stays out of v1 and needs more thought. The **developer's own instance is hand-seeded once, out-of-band** (exactly the "out-of-band" path the spec allows) — a manual OpenClaw → canonical-store curation that populates `~/.config/doc-editor/memory/` only. It does **not** set up the `~/.claude/` projection (that waits for `--bare`, §2.2), so the seed files are inert until `lib/memory.js` reads them. No write-back to OpenClaw, ever.
 
 ### 2.3 The manifest (`memory.json`)
 
@@ -121,7 +133,7 @@ Identical to personalization §3: the capture/distill passes run through the use
 ## 7. Modules and changes
 
 - **`lib/memory.js` (new).** `load()`, `retrieve(ctx)`, `compose(retrieved, opts)`, `propose(items)` (queue), `keep(id)`/`discard(id)`/`forget(id)`, `editProfile(md)`, projection (`syncToClaudeDir()` — symlink/copy), atomic writes. Sibling to `voicestore.js`.
-- **`lib/claude.js`.** `generate()` appends the verbatim intake block + `memory.compose(...)`; `revise()` appends `contextSummary` + `memory.compose(...)`; new `distillContext(intake)`; reuse `analyze()` for the capture pass. Keep all spawns in `RUN_DIR`.
+- **`lib/claude.js`.** `generate()` appends the verbatim intake block + `memory.compose(...)`; `revise()` appends `contextSummary` + `memory.compose(...)`; new `distillContext(intake)`; reuse `analyze()` for the capture pass. Keep all spawns in `RUN_DIR`, and **add `--bare` to the writing spawns** (generate/revise/analyze/distill/interview/compileBrief/toDeck) so they don't auto-load `~/.claude/CLAUDE.md`+`USER.md` (§2.2) — memory enters only via `memory.compose()`. Mail spawns stay non-bare (§11.6).
 - **`lib/learn.js`.** Route durable, about-the-user `context` candidates to `memory.propose()` (instead of the doc); add the intake-transcript capture entry point.
 - **`lib/docs.js`.** New meta fields: `intake` (transcript), `contextSummary` (distilled), `usePersonalFacts` (toggle, default false).
 - **`server.js` (thin).** `GET /api/memory` (profile + queue + index), `POST /api/memory/keep|discard|forget`, `PUT /api/memory/profile`, `POST /api/memory/chat` (chat-box add/edit), `GET /api/docs/:id/context` (what this draft will use), `PUT /api/docs/:id/use-personal-facts`. Capture is kicked server-side after draft (non-blocking).
@@ -142,7 +154,7 @@ Same discipline as the voice store: write-temp-then-rename for `memory.json`, `U
 ## 10. Build order
 
 1. **Doc-specific fix first (Q7 / hybrid C)** — it's self-contained and fixes the live Bali bug: persist `meta.intake`, verbatim into generate, `distillContext()` + `contextSummary` into revise. Ship and verify against a real intake doc.
-2. **`lib/memory.js` store + manifest + projection** (symlink/copy), with `USER.md` scaffolding and atomic writes.
+2. **`lib/memory.js` store + manifest + projection** (symlink/copy + the `@USER.md` import), with `USER.md` scaffolding and atomic writes. **Couple this with the `--bare` switch on writing spawns** (§2.2) and the smoke gate (verify auth/tools/`--add-dir` survive `--bare`) — the two must land together, since creating `~/.claude/CLAUDE.md` is what makes `--bare` necessary.
 3. **Retrieval + compose + the guardrail** wired into generate/revise; per-doc toggle.
 4. **Capture** (intake pass + learn-pipeline routing) → unsaved queue.
 5. **Profile tab** (unified): about-you, unsaved queue (keep/discard/forget), chat box, the per-draft "what this draft uses" panel.
@@ -150,8 +162,9 @@ Same discipline as the voice store: write-temp-then-rename for `memory.json`, `U
 
 ## 11. Open questions (design-level)
 
-1. **Projection mechanism precision.** Does current Claude Code auto-load a projected `~/.claude/USER.md`, or must we add an `@USER.md` import to `~/.claude/CLAUDE.md` (2.2)? Verify before wiring the projection; symlink-vs-copy default may depend on the answer.
-2. **Default canonical path.** `~/.config/doc-editor/memory/` (proposed) vs `~/.doc-editor/memory/` vs other. Cosmetic but user-facing.
-3. **`usePersonalFacts` default.** Off everywhere (safest, proposed) vs kind-aware (off for `mail`, on for clearly-personal docs). Off-by-default risks a family post omitting names until toggled; is that acceptable for v1?
-4. **"Major revision" for re-distill.** Regenerate only (proposed) vs every N revisions vs size-delta threshold. Keep it cheap.
-5. **Profile-section taxonomy for keep.** When a fact is kept, how do we choose its `USER.md` section / topical file — model-decided in the capture pass, or a small fixed set (identity / people / work / taste / other)? Fixed set is simpler and more predictable for v1.
+1. **Projection mechanism. (Verified + decided: A, consented.)** Verified against Claude Code 2.1.168 (§2.2): `~/.claude/USER.md` is **not** auto-loaded; the supported path is an **`@USER.md` import in `~/.claude/CLAUDE.md`**; and writing spawns need **`--bare`** so doc-editor doesn't auto-load the profile itself. **Decision (A):** doc-editor **automatically creates/appends `~/.claude/CLAUDE.md` with the `@USER.md` import** (idempotent; never clobbers existing content), so all interactive Claude sessions benefit with zero user effort — but the write is **shown and consented** (it is the one action that edits a file outside the app's own store). This must land together with `--bare` (build order step 2), never before.
+2. **Default canonical path. (Decided.)** `~/.config/doc-editor/memory/` (override `DOC_EDITOR_MEMORY_DIR`).
+3. **`usePersonalFacts` default. (Decided.)** Off everywhere for v1. Grounding (anti-fabrication) is always on; only *volunteering* private facts into the output requires the per-doc opt-in.
+4. **Re-distill trigger. (Decided.)** Regenerate-only, plus a manual "refresh context" affordance. Cheap and predictable.
+5. **Keep taxonomy. (Decided.)** A small fixed set of `USER.md` sections — **identity / people / work / taste / other** — chosen by the capture pass. Predictable and easy to inspect; richer/topical files come later.
+6. **Mail + memory. (New, flagged — v1 follow-up.)** Because mail spawns can't take `--bare` (they need MCP auto-discovery), once `~/.claude/CLAUDE.md` exists mail calls will auto-load the full profile (extra cost; the leakage guardrail isn't applied to drafted mail). Resolve later: pass `--bare --mcp-config` to mail, or accept profile grounding for mail and apply the guardrail explicitly there.

@@ -292,9 +292,8 @@ This is step 1 of the personal-memory work (`specs/personal-memory-spec.md`,
 
 ### Personal memory (`lib/memory.js`) — the durable, cross-document layer
 
-The "what is true about me" store, sibling to the voice store ("how I write"). Step 2
-built the store; wiring it into generate/revise (retrieval + the leakage guardrail)
-is the next step.
+The "what is true about me" store, sibling to the voice store ("how I write"). The
+store is built (step 2) AND wired into generate/revise (step 3).
 
 - **Canonical content is portable Markdown the user owns**, OUTSIDE the repo:
   `$DOC_EDITOR_MEMORY_DIR` (default `~/.config/doc-editor/memory/`) → `USER.md` (the
@@ -312,7 +311,11 @@ is the next step.
   the injected block carrying the guardrail: grounding is always on; *volunteering*
   private facts into the output is gated by the per-doc `usePersonalFacts` (default
   off). This is the ONLY path memory takes into a prompt (hence the `--setting-sources`
-  exclusion above).
+  exclusion above). The composed block is appended to the **writing system prompt**
+  (`generate()`/`revise()` take a `memory` param); the per-doc gate flips via
+  `PUT /api/docs/:id/use-personal-facts`; and `GET /api/docs/:id/context` exposes
+  exactly "what this draft will use" (voice + retrieved profile/topics + the gate)
+  for the transparency panel. Empty store ⇒ empty block ⇒ no-op (back-compatible).
 - **Projection (`syncToClaudeDir`, consented):** symlinks `USER.md` →
   `~/.claude/USER.md` and adds an idempotent `@USER.md` import to `~/.claude/CLAUDE.md`
   so the user's OTHER Claude sessions benefit. Decision A — it edits a file outside the

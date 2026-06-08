@@ -119,6 +119,14 @@ test('setContextSummary stores and clears the distilled summary', () => {
   assert.equal(docs.setContextSummary(id, '').contextSummary, null); // empty also clears
 });
 
+test('usePersonalFacts defaults false and toggles (the per-doc output gate)', () => {
+  const { id } = docs.create('x');
+  assert.equal(docs.readMeta(id).usePersonalFacts, false);
+  assert.equal(docs.setUsePersonalFacts(id, true).usePersonalFacts, true);
+  assert.equal(docs.setUsePersonalFacts(id, false).usePersonalFacts, false);
+  assert.equal(docs.setUsePersonalFacts(id, 1).usePersonalFacts, true); // coerced to boolean
+});
+
 test('remove() deletes both files', () => {
   const { id } = docs.create('x');
   docs.setMarkdown(id, '# X');

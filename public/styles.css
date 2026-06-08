@@ -601,11 +601,17 @@ button {
 .mem-text { font-size: 14px; line-height: 1.4; }
 .mem-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
 .mem-actions { margin-top: 8px; display: flex; gap: 8px; }
-.mem-profile { border: 1px solid var(--line); border-radius: 10px; padding: 4px 16px; background: var(--paper); max-height: 460px; overflow-y: auto; }
-.mem-profile h1, .mem-profile h2 { font-size: 16px; margin: 14px 0 6px; }
-.mem-profile h3 { font-size: 14px; margin: 12px 0 4px; }
+.mem-profile { border: 1px solid var(--line); border-radius: 10px; padding: 4px 16px 12px; background: var(--paper); max-height: 460px; overflow-y: auto; font-size: 13px; line-height: 1.5; }
+.mem-profile > :first-child { margin-top: 8px; }
+.mem-profile h1 { font-size: 17px; margin: 14px 0 6px; }
+.mem-profile h2 { font-size: 15px; margin: 14px 0 6px; }
+.mem-profile h3 { font-size: 13px; margin: 12px 0 4px; }
+.mem-profile p { margin: 6px 0; }
 .mem-profile ul { margin: 4px 0; padding-left: 20px; }
 .mem-profile li { font-size: 13px; line-height: 1.45; }
+.mem-profile em { color: var(--muted); }
+.mem-profile code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
+.mem-profile a { color: var(--accent); }
 .mem-profile-text { width: 100%; min-height: 360px; resize: vertical; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5; border: 1px solid var(--line); border-radius: 10px; box-sizing: border-box; }
 .mem-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
 .mem-facts-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin: 4px 0; cursor: pointer; }

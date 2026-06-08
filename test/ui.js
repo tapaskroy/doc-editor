@@ -31,7 +31,14 @@ const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-'));
 // button can never touch the real ~/.claude even if exercised.
 const MEMTMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-mem-'));
 const CLATMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-cla-'));
-fs.writeFileSync(path.join(MEMTMP, 'USER.md'), '# USER.md\n\n## Work\n- Works in software.\n');
+// A realistic, multi-section profile (generic — no real personal data) so the
+// rendered "About you" box is substantial enough to expose layout bugs.
+fs.writeFileSync(path.join(MEMTMP, 'USER.md'),
+  '# USER.md — About the user\n\n*Personal memory the editor reads to ground writing.*\n\n' +
+  '## Identity\n- Based in a large metro area; speaks three languages.\n- A long-time engineer who moved into executive leadership.\n\n' +
+  '## People\n- Has a spouse and one child.\n- Keeps a close circle of college friends.\n\n' +
+  '## Work\n- Vice President of a software organization of about two thousand people, owning the common platform layer across many product lines and partnering with product teams to ship and maintain services.\n- Operating philosophy favors decentralized, empowered teams that stay tightly coupled on strategy and loosely coupled on execution.\n\n' +
+  '## Taste\n- Enjoys historical and geopolitical nonfiction, and the occasional long essay.\n');
 fs.writeFileSync(path.join(MEMTMP, 'memory.json'), JSON.stringify({ items: [
   { id: 'm_q1', topic: 'profile', section: 'people', text: 'Has a spouse and one child.', status: 'unsaved', provenance: 'Learned from a planning conversation.', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: null },
   { id: 'm_k1', topic: 'profile', section: 'work', text: 'Works in software.', status: 'kept', provenance: '', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: '2026-01-02T00:00:00Z' },
@@ -76,7 +83,31 @@ function audit() {
   });
   const de = document.documentElement;
   const pageOverflow = de.scrollWidth > vw + 2 ? { scrollWidth: de.scrollWidth, innerWidth: vw } : null;
-  return { overflowed, opacityAnimated, measured, pageOverflow };
+  // Intra-page overflow + container escape. A child escaping its parent's right edge
+  // (e.g. a fixed-width box dropped into a flexible grid cell) overlaps its sibling
+  // column even when the page still fits the window — which is what page-level
+  // overflow misses. The editor is exempt: it intentionally scrolls horizontally.
+  let viewOverflow = null;
+  const escapes = [];
+  const av = document.querySelector('.view:not(.hidden)');
+  if (av && av.id !== 'view-editor') {
+    if (av.scrollWidth > av.clientWidth + 2) viewOverflow = { id: av.id, scrollWidth: av.scrollWidth, clientWidth: av.clientWidth };
+    av.querySelectorAll('*').forEach((el) => {
+      const s = getComputedStyle(el);
+      if (s.display === 'none' || s.visibility === 'hidden' || s.position === 'absolute' || s.position === 'fixed') return;
+      const p = el.parentElement;
+      if (!p) return;
+      const ps = getComputedStyle(p);
+      // A parent that scrolls/clips horizontally is meant to contain overflow.
+      if (['auto', 'scroll', 'hidden'].includes(ps.overflowX)) return;
+      const r = el.getBoundingClientRect();
+      const pr = p.getBoundingClientRect();
+      if (r.width > 0 && r.right > pr.right + 2) {
+        escapes.push({ el: el.tagName.toLowerCase() + (el.id ? '#' + el.id : (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/)[0] : '')), over: Math.round(r.right - pr.right) });
+      }
+    });
+  }
+  return { overflowed, opacityAnimated, measured, pageOverflow, viewOverflow, escapes: escapes.slice(0, 6) };
 }
 
 const failures = [];
@@ -86,6 +117,8 @@ function record(scene, width, v, { checkPage }) {
   v.overflowed.forEach((b) => probs.push(`button ${b.id ? '#' + b.id : JSON.stringify(b.text)} text overflows its box (scrollWidth ${b.scrollWidth} > clientWidth ${b.clientWidth})`));
   v.opacityAnimated.forEach((b) => probs.push(`button ${b.id ? '#' + b.id : JSON.stringify(b.text)} animates opacity (transition-property: ${b.transitionProperty}) — risks a resize-during-fade ghost`));
   if (checkPage && v.pageOverflow) probs.push(`page overflows viewport (${v.pageOverflow.scrollWidth} > ${v.pageOverflow.innerWidth})`);
+  if (v.viewOverflow) probs.push(`#${v.viewOverflow.id} content overflows its own width (scrollWidth ${v.viewOverflow.scrollWidth} > clientWidth ${v.viewOverflow.clientWidth})`);
+  (v.escapes || []).forEach((e) => probs.push(`${e.el} escapes its container by ${e.over}px (overlaps the adjacent column/content)`));
   if (probs.length) { failures.push({ scene, width }); console.log(`  ✗ ${scene} @${width}px`); probs.forEach((p) => console.log('      - ' + p)); }
   else console.log(`  ✓ ${scene} @${width}px`);
 }

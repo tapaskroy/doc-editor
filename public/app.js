@@ -88,6 +88,15 @@ function initPicker() {
     settings.skill = s.value;
     if (s.value) localStorage.setItem('de.skill', s.value);
     else localStorage.removeItem('de.skill');
+    // Voice is per-document: persist the choice on the open doc. The localStorage
+    // value above is just the default applied to new docs.
+    if (currentId) {
+      api.json(`/api/docs/${currentId}/voice`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voiceId: s.value || null }),
+      }).catch(() => {});
+    }
   });
   m.addEventListener('change', () => {
     settings.model = m.value;
@@ -173,7 +182,7 @@ $('#create-btn').addEventListener('click', async () => {
     const meta = await api.json('/api/docs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ premise }),
+      body: JSON.stringify({ premise, voice: localStorage.getItem('de.skill') || null }),
     });
     $('#premise').value = '';
     if (pendingAttachments.length) {
@@ -840,7 +849,7 @@ $('#brief-draft').addEventListener('click', async () => {
     const meta = await api.json('/api/docs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort, kind: briefKind || undefined, email: briefEmailInit || undefined }),
+      body: JSON.stringify({ premise, intake: intakeMessages, intakeUsage, model: settings.model, effort: settings.effort, kind: briefKind || undefined, email: briefEmailInit || undefined, voice: localStorage.getItem('de.skill') || null }),
     });
     briefEmailInit = null;
     if (pendingAttachments.length) {
@@ -974,6 +983,13 @@ async function showEditor(id) {
   renderVersions(data.versions || []);
   applyMailChrome(data);
   loadPublishSkills(data);
+
+  // Voice is strictly per-document: show this doc's own voice, or None if it has
+  // none. No global fallback (that made every unset doc look the same, and let one
+  // doc's voice bleed onto others). New docs inherit the default at creation, so a
+  // first draft still uses your usual voice.
+  settings.skill = data.voice || '';
+  $('#sel-style').value = settings.skill;
 
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.

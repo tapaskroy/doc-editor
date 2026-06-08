@@ -74,8 +74,8 @@ app.get('/api/skills', (req, res) => {
 });
 
 app.post('/api/docs', async (req, res) => {
-  const { premise = '', intake, intakeUsage, model, effort, kind, email } = req.body || {};
-  let meta = docs.create(premise, { kind, email });
+  const { premise = '', intake, intakeUsage, model, effort, kind, email, voice } = req.body || {};
+  let meta = docs.create(premise, { kind, email, voice });
   // Carry over the cost of the briefing interview turns (run before the doc existed).
   if (Array.isArray(intakeUsage) && intakeUsage.length) {
     meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', requested: model || '', ...u })));
@@ -124,6 +124,14 @@ function saveContent(req, res) {
 }
 app.put('/api/docs/:id/content', saveContent);
 app.post('/api/docs/:id/content', saveContent);
+
+// The voice (style skill id) a document writes in. Per-document; the Style picker
+// sets it. Generation/revision resolve this before the legacy ?skill= fallback.
+app.put('/api/docs/:id/voice', (req, res) => {
+  if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const meta = docs.setVoice(req.params.id, (req.body || {}).voiceId || null);
+  res.json({ ok: true, voice: meta.voice });
+});
 
 app.get('/api/docs/:id', (req, res) => {
   if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
@@ -221,10 +229,12 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
 app.get('/api/docs/:id/generate', (req, res) => {
   const { id } = req.params;
   if (!docs.exists(id)) return res.status(404).end();
-  const { premise, brief, attachments: atts = [], kind, email } = docs.readMeta(id);
+  const { premise, brief, attachments: atts = [], kind, email, voice } = docs.readMeta(id);
   const { model, effort } = req.query;
   let web = req.query.web === 'true';
-  const style = req.query.skill ? skills.read(req.query.skill) : null;
+  // Per-document voice takes precedence; the ?skill= query is a legacy fallback.
+  const voiceId = voice || req.query.skill || null;
+  const style = voiceId ? skills.compose(voiceId) : null;
   const references = attachments.referenceBlock(id, atts);
   const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
   // A briefed doc generates from its structured brief; otherwise from the premise.
@@ -329,8 +339,9 @@ app.post('/api/docs/:id/revise', async (req, res) => {
 
   try {
     const markdown = docs.getMarkdown(id);
-    const { history = [], attachments: atts = [] } = docs.readMeta(id);
-    const style = skill ? skills.read(skill) : null;
+    const { history = [], attachments: atts = [], voice } = docs.readMeta(id);
+    const voiceId = voice || skill || null;
+    const style = voiceId ? skills.compose(voiceId) : null;
     const references = attachments.referenceBlock(id, atts);
     const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);

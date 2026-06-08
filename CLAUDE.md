@@ -290,6 +290,34 @@ because generate and revise have different constraints:
 This is step 1 of the personal-memory work (`specs/personal-memory-spec.md`,
 `design/personal-memory-design.md`); the durable cross-document layer comes next.
 
+### Personal memory (`lib/memory.js`) — the durable, cross-document layer
+
+The "what is true about me" store, sibling to the voice store ("how I write"). Step 2
+built the store; wiring it into generate/revise (retrieval + the leakage guardrail)
+is the next step.
+
+- **Canonical content is portable Markdown the user owns**, OUTSIDE the repo:
+  `$DOC_EDITOR_MEMORY_DIR` (default `~/.config/doc-editor/memory/`) → `USER.md` (the
+  always-on core) + `topics/<topic>.md`. `memory.json` is **metadata only**
+  (provenance + the unsaved review queue); the Markdown is authoritative for content
+  (this is what avoids the `voice.json`/`SKILL.md` split-brain).
+- **Capture is suggest-only:** `propose()` queues candidates as `unsaved` (deduped);
+  `keep()` appends the fact to the right `USER.md` section (fixed taxonomy:
+  identity/people/work/taste/other) or topic file and marks it `kept`; `discard()`
+  tombstones; `forget()` removes a kept fact from the Markdown. Nothing reaches the
+  Markdown — or a prompt — until kept.
+- **Consumption is controlled:** `retrieve({premise,brief,recipients})` returns the
+  always-on `USER.md` plus only the topically-relevant files (v1 lexical overlap; a
+  Haiku-scored pass is the noted seam). `compose(retrieved,{usePersonalFacts})` builds
+  the injected block carrying the guardrail: grounding is always on; *volunteering*
+  private facts into the output is gated by the per-doc `usePersonalFacts` (default
+  off). This is the ONLY path memory takes into a prompt (hence the `--setting-sources`
+  exclusion above).
+- **Projection (`syncToClaudeDir`, consented):** symlinks `USER.md` →
+  `~/.claude/USER.md` and adds an idempotent `@USER.md` import to `~/.claude/CLAUDE.md`
+  so the user's OTHER Claude sessions benefit. Decision A — it edits a file outside the
+  store, so it must be user-consented; overridable target via `DOC_EDITOR_CLAUDE_DIR`.
+
 The reviser also has a tolerant JSON extractor (handles stray text / code fences)
 and a single sterner retry, as belt-and-suspenders against occasional drift.
 
@@ -323,6 +351,18 @@ All flags live in `lib/claude.js`. Things that are load-bearing:
   to the project cwd.** Attachment files (under the project) are reached via
   `--add-dir <doc's asset dir>`, passed only when references are present, since
   we're no longer in the project tree.
+- **Writing spawns pass `--setting-sources project,local` (load-bearing).** This
+  loads only the project+local setting/memory sources and excludes `user`, so the
+  USER-level `~/.claude/CLAUDE.md` (and its `@USER.md` personal-memory import) is
+  **not** auto-loaded into writing calls — `RUN_DIR` only ever blocked the *project*
+  CLAUDE.md. The personal-memory profile must enter the prompt **only** via the
+  guardrailed `memory.compose()` path (see `lib/memory.js`), never as an un-scoped
+  auto-load that would also bypass the leakage guardrail. **Do NOT switch to
+  `--bare`**: it skips keychain reads and breaks subscription auth (`apiKeySource:
+  none` → "Not logged in"); `--setting-sources` leaves auth untouched (verified).
+  Subtlety: this also skips the user's *settings.json* for writing calls (model/
+  effort/permissions), which is fine — those calls are fully parameterized by the
+  app. (Mail spawns keep all sources; they need user-level MCP config.)
 
 ## Export (`lib/export.js`, `GET /api/docs/:id/export?format=…`)
 

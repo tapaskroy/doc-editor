@@ -293,7 +293,8 @@ This is step 1 of the personal-memory work (`specs/personal-memory-spec.md`,
 ### Personal memory (`lib/memory.js`) — the durable, cross-document layer
 
 The "what is true about me" store, sibling to the voice store ("how I write"). The
-store is built (step 2) AND wired into generate/revise (step 3).
+store is built (step 2), wired into generate/revise (step 3), and fed by intake
+capture (step 4). The Profile-tab UI is step 5.
 
 - **Canonical content is portable Markdown the user owns**, OUTSIDE the repo:
   `$DOC_EDITOR_MEMORY_DIR` (default `~/.config/doc-editor/memory/`) → `USER.md` (the
@@ -304,7 +305,14 @@ store is built (step 2) AND wired into generate/revise (step 3).
   `keep()` appends the fact to the right `USER.md` section (fixed taxonomy:
   identity/people/work/taste/other) or topic file and marks it `kept`; `discard()`
   tombstones; `forget()` removes a kept fact from the Markdown. Nothing reaches the
-  Markdown — or a prompt — until kept.
+  Markdown — or a prompt — until kept. The first capture SOURCE is
+  `learn.captureFromIntake()` (Haiku): after the FIRST draft, the server's
+  `captureMemory()` mines the planning transcript for durable user facts (excluding
+  this-doc specifics), **non-blocking** and **once** (guarded by `meta.capturedAt`),
+  routing them to `propose()` with provenance. Browse/manage the queue via
+  `GET /api/memory` + `POST /api/memory/{keep,discard,forget}`. (Routing the learn
+  pipeline's edit-`context` candidates to memory is a deliberate follow-up — today
+  they still go to the voice store.)
 - **Consumption is controlled:** `retrieve({premise,brief,recipients})` returns the
   always-on `USER.md` plus only the topically-relevant files (v1 lexical overlap; a
   Haiku-scored pass is the noted seam). `compose(retrieved,{usePersonalFacts})` builds

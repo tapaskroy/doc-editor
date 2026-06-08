@@ -256,6 +256,24 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
   res.json({ history: meta.history });
 });
 
+// Mine a doc's planning transcript for durable user facts and offer them to the
+// personal-memory review queue (suggest-only). Fire-and-forget, runs once per doc
+// (guarded by meta.capturedAt), never blocks the draft response. No-op without an
+// intake transcript.
+function captureMemory(id) {
+  const meta = docs.readMeta(id);
+  if (!Array.isArray(meta.intake) || !meta.intake.length || meta.capturedAt) return;
+  learn.captureFromIntake(meta.intake)
+    .then(({ facts, usage }) => {
+      if (facts && facts.length) {
+        memory.propose(facts.map((f) => ({ ...f, source: 'intake', provenance: `Learned from the planning conversation on "${meta.title}"` })));
+      }
+      if (usage) docs.addUsage(id, { op: 'capture', requested: 'haiku', ...usage });
+      docs.setCapturedAt(id);
+    })
+    .catch((e) => console.error('memory capture failed:', e.message));
+}
+
 // --- Generation (Server-Sent Events stream) ------------------------------
 
 app.get('/api/docs/:id/generate', (req, res) => {
@@ -322,6 +340,9 @@ app.get('/api/docs/:id/generate', (req, res) => {
       versions.add(id, { label: op === 'draft' ? 'Draft' : 'Regenerated', kind: 'ai', model: usage.model, usd: usage.usd, markdown, voice: voiceId });
       send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history, usage: meta.usage });
       res.end();
+      // After the first draft, mine the planning transcript for durable user facts
+      // (non-blocking, suggest-only -> the unsaved memory queue). Never on regenerate.
+      if (op === 'draft') captureMemory(id);
     },
     onError: (message) => {
       send('error', { message });
@@ -455,6 +476,39 @@ app.get('/api/docs/:id/context', (req, res) => {
       topics: retrieved.topics.map((t) => t.name),
     },
   });
+});
+
+// --- Personal memory: browse the store + review the unsaved queue ---------
+// (The Profile-tab UI is step 5; these backend routes back it and let capture be
+// verified now. Keep/discard/forget are the consent gate — suggest-only capture
+// never reaches the Markdown until kept here.)
+
+app.get('/api/memory', (req, res) => {
+  res.json({
+    enabled: memory.storeExists(),
+    profile: memory.readProfile(),
+    topics: memory.listTopics(),
+    queue: memory.listQueue(), // unsaved candidates awaiting keep/discard
+    kept: memory.listKept(),
+  });
+});
+
+app.post('/api/memory/keep', (req, res) => {
+  const item = memory.keep((req.body || {}).id);
+  if (!item) return res.status(404).json({ error: 'item not found or not unsaved' });
+  res.json({ item });
+});
+
+app.post('/api/memory/discard', (req, res) => {
+  const item = memory.discard((req.body || {}).id);
+  if (!item) return res.status(404).json({ error: 'item not found' });
+  res.json({ item });
+});
+
+app.post('/api/memory/forget', (req, res) => {
+  const item = memory.forget((req.body || {}).id);
+  if (!item) return res.status(404).json({ error: 'item not found' });
+  res.json({ item });
 });
 
 // --- Output skills (skill-driven Export / Publish) -----------------------

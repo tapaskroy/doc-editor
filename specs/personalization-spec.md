@@ -1,6 +1,6 @@
 # doc-editor: Personalization Spec (Voice and Context Learning)
 
-*Status: design, spec-level decisions **locked 2026-06-08** (section 12), reworked after an architecture review and a real-history finding (the "Bali" retry loop, section 5). The engine behind the flywheel in [`vision.md`](vision.md). Architecture in [`personalization-design.md`](../design/personalization-design.md). Builds on the Phase 1 voice store (`lib/skills.js` `compose()` + `voice.json`) and reuses the consented review-gate pattern.*
+*Status: design, spec-level decisions **locked 2026-06-08** (section 12), reworked after an architecture review and a real-history finding (the "Bali" retry loop, section 5). The engine behind the flywheel in [`vision.md`](vision.md). Architecture in [`personalization-design.md`](../design/personalization-design.md). The **context layer** these route to (durable facts about the user) is now specced separately in [`personal-memory-spec.md`](personal-memory-spec.md), which resolves this spec's deferred "context representation" question. Builds on the Phase 1 voice store (`lib/skills.js` `compose()` + `voice.json`) and reuses the consented review-gate pattern.*
 
 ## 1. What it is, and why
 
@@ -55,8 +55,9 @@ already snapshots this; comments record intent). The loop:
    - **voice** — a style/taste preference. Reaches the voice layer, but only with
      **cross-document corroboration** (the same kind of edit in independent docs). A
      within-span retry chain counts as at most one observation, never as confidence.
-   - **context** — a fact the user corrected or supplied. Reaches the context layer
-     (with consent).
+   - **context** — a fact the user corrected or supplied. Reaches the context layer —
+     **personal memory** ([`personal-memory-spec.md`](personal-memory-spec.md)) — with
+     consent, if it is durable and about the user/world; otherwise it stays on the doc.
    - **claude-correction** — the user fixing a Claude mistake. This is **process
      feedback, never personalization** (section 7). It splits into a generalizable
      quality rule (→ global baseline) or a behavioral guardrail / bug (→ the feedback

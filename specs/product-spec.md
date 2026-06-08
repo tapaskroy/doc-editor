@@ -88,6 +88,8 @@ folder with a `SKILL.md` describing a writing voice. Pick one and every draft an
 revision comes out in that voice. No voice is baked into the app; it's a file you
 select.
 
+*In design (not yet built): the voice learns from your edits ([`personalization-spec.md`](personalization-spec.md)), and a **personal memory** layer lets the tool draw on durable facts about you to write more accurately ([`personal-memory-spec.md`](personal-memory-spec.md)).*
+
 ## 8. Web research
 
 A **🌐 Web** toggle (top bar, on by default). When on, Claude may search the web

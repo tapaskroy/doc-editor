@@ -1,6 +1,6 @@
 # doc-editor: Vision and Strategy
 
-*The north star and the competitive thesis. For what the tool does today see [`product-spec.md`](product-spec.md); for how output/publishing works see [`output-skills-spec.md`](output-skills-spec.md); for the engine that powers the flywheel (learn-from-edits plus bring-your-context) see [`personalization-spec.md`](personalization-spec.md).*
+*The north star and the competitive thesis. For what the tool does today see [`product-spec.md`](product-spec.md); for how output/publishing works see [`output-skills-spec.md`](output-skills-spec.md); for the engine that powers the flywheel (learn-from-edits plus bring-your-context) see [`personalization-spec.md`](personalization-spec.md); for the personal memory layer (what the tool durably knows about you) see [`personal-memory-spec.md`](personal-memory-spec.md).*
 
 ## The thesis: bring the person to the AI
 
@@ -46,7 +46,11 @@ slowly. This is the most important thing to build.
 - **Context** — what the user knows: their people, projects, facts, history,
   preferences. Grows without bound. The deeper long-term moat (an AI that knows your
   world) and the heavier privacy responsibility. Treat it as its own layer, not as
-  part of voice.
+  part of voice. Now specced as **personal memory** ([`personal-memory-spec.md`](personal-memory-spec.md)):
+  a portable, user-owned `USER.md`-style profile the writer grounds in, captured with
+  consent and a hard leakage guardrail. The question shifts from "how much of this
+  *document's* context should the editor have" to "how does the writer **intimately
+  know you**, preserve the trust, and use what it knows to write better."
 
 ### Consented and legible
 
@@ -117,4 +121,7 @@ Copilot-in-VS-Code.
   now, biggest single point of failure later. Keep the architecture model-agnostic
   at the seams so "BYO model" can mean Claude or others.
 - **Privacy weight of the context layer.** The more the tool knows the user, the
-  higher the bar for local-first handling and consented learning.
+  higher the bar for local-first handling and consented learning. The personal-memory
+  spec's answer: ground-but-don't-volunteer with a per-document output control,
+  transparency (the Profile tab shows what each draft will send), and local-only
+  storage with a BYO-model seam for the privacy-conscious.

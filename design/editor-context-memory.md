@@ -8,6 +8,18 @@ publishing-skills feature ships. No code beyond this note. Builds on
 [`../CLAUDE.md`](../CLAUDE.md), and the cross-surface `threadSummary` pattern in
 [`mail-design.md`](mail-design.md) §6._
 
+> **Update (2026-06-08):** this note framed a **per-document** question (how much of
+> *this doc's* shaping the editor should carry — the L0–L4 spectrum, centered on L2,
+> the "why"). The center of gravity has since moved up to **L3 made first-class**:
+> how the writer comes to **intimately know you** across everything you write, with
+> **trust elevated from a trade-off to a co-equal design goal**. That is specced in
+> [`../specs/personal-memory-spec.md`](../specs/personal-memory-spec.md) and designed
+> in [`personal-memory-design.md`](personal-memory-design.md). This note's hard-won
+> constraints carry over verbatim: distilled-summary-not-raw-transcript (reliability),
+> inspectable-not-black-box, a freshness story, and per-doc/user-global/cross-surface
+> scope separation. v1 mapping: L2 per-doc = the on-doc context fix (hybrid C),
+> L3 user = personal memory, L4 corpus + the journal = deferred.
+
 ## 1. The question
 
 > **"How much of my context should the doc editor have in order to do the best job

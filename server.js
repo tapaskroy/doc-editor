@@ -10,6 +10,7 @@ const docs = require('./lib/docs');
 const claude = require('./lib/claude');
 const exporter = require('./lib/export');
 const skills = require('./lib/skills');
+const voicestore = require('./lib/voicestore');
 const attachments = require('./lib/attachments');
 const versions = require('./lib/versions');
 const mail = require('./lib/mail');
@@ -234,7 +235,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
   let web = req.query.web === 'true';
   // Per-document voice takes precedence; the ?skill= query is a legacy fallback.
   const voiceId = voice || req.query.skill || null;
-  const style = voiceId ? skills.compose(voiceId) : null;
+  const style = voiceId ? voicestore.compose(voiceId) : null;
   const references = attachments.referenceBlock(id, atts);
   const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
   // A briefed doc generates from its structured brief; otherwise from the premise.
@@ -276,7 +277,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     onDone: (markdown, usage) => {
       docs.setMarkdown(id, markdown);
       const meta = docs.addUsage(id, { op, requested: model || '', ...usage });
-      versions.add(id, { label: op === 'draft' ? 'Draft' : 'Regenerated', kind: 'ai', model: usage.model, usd: usage.usd, markdown });
+      versions.add(id, { label: op === 'draft' ? 'Draft' : 'Regenerated', kind: 'ai', model: usage.model, usd: usage.usd, markdown, voice: voiceId });
       send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history, usage: meta.usage });
       res.end();
     },
@@ -341,14 +342,14 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     const markdown = docs.getMarkdown(id);
     const { history = [], attachments: atts = [], voice } = docs.readMeta(id);
     const voiceId = voice || skill || null;
-    const style = voiceId ? skills.compose(voiceId) : null;
+    const style = voiceId ? voicestore.compose(voiceId) : null;
     const references = attachments.referenceBlock(id, atts);
     const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);
     const meta = docs.addUsage(id, { op: 'revise', requested: model || '', ...usage });
-    versions.add(id, { label: `Revision: ${shortLabel(request)}`, kind: 'ai', model: usage.model, usd: usage.usd, markdown: updated });
+    versions.add(id, { label: `Revision: ${shortLabel(request)}`, kind: 'ai', model: usage.model, usd: usage.usd, markdown: updated, voice: voiceId });
     res.json({
       markdown: updated,
       html: render(updated),

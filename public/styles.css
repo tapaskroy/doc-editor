@@ -84,7 +84,10 @@ button {
   border-radius: 9px;
   border: 1px solid transparent;
   padding: 9px 16px;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  /* Note: opacity is intentionally NOT transitioned. Animating it while a label
+     also changes (e.g. a button becoming disabled + "Preparing the brief…") made
+     Chrome composite a faded, old-width ghost under the new wider text. */
+  transition: background 0.15s, border-color 0.15s;
 }
 .primary {
   background: var(--accent);

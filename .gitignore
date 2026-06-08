@@ -5,3 +5,4 @@ docs/*.meta.json
 docs-assets/
 docs-versions/
 docs-cache/
+feedback.json

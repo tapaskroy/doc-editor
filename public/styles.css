@@ -576,3 +576,12 @@ button {
 .env-subject-text { font-weight: 600; }
 .mail-foot { width: 8.5in; max-width: 100%; margin: 14px auto 28px; display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .mail-foot .spacer { flex: 1; }
+
+/* ---- learn-from-my-edits review ---- */
+.learn-body { display: grid; gap: 18px; }
+.learn-group h4 { margin: 0 0 8px; font-size: 13px; }
+.learn-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.learn-obs { font-size: 14px; color: var(--ink); }
+.learn-text { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.learn-sub { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin-top: 6px; }
+.learn-actions { margin-top: 8px; display: flex; gap: 8px; align-items: center; }

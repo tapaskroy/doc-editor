@@ -1783,6 +1783,81 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---- learn from my edits (the personalization loop) ---------------------
+$('#learn-btn').addEventListener('click', runLearn);
+$('#learn-close').addEventListener('click', () => $('#learn-modal').classList.add('hidden'));
+$('#learn-modal').addEventListener('click', (e) => { if (e.target.id === 'learn-modal') $('#learn-modal').classList.add('hidden'); });
+
+async function runLearn() {
+  if (!currentId) return;
+  const btn = $('#learn-btn');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Analyzing your edits…';
+  try {
+    await flushSave();
+    const r = await api.json(`/api/docs/${currentId}/learn/propose`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: settings.model || 'haiku' }),
+    });
+    renderLearn(r);
+    $('#learn-modal').classList.remove('hidden');
+  } catch (e) {
+    toast('Learn failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+function renderLearn(r) {
+  $('#learn-note').textContent =
+    `${r.events || 0} edit event(s) analyzed` + (r.capped ? ' (most recent capped)' : '') +
+    (r.voiceId ? ` · voice: ${r.voiceId}` : ' · no voice set');
+  const groups = [
+    ['Voice — how you write', r.voiceCandidates || [], 'voice'],
+    ['Context — about you', r.contextCandidates || [], 'context'],
+    ['For Claude — fixes to how it works (not your voice)', r.feedbackCandidates || [], 'claude'],
+  ];
+  const total = groups.reduce((n, g) => n + g[1].length, 0);
+  const body = $('#learn-body');
+  if (!total) {
+    body.innerHTML = '<p class="hint">No durable lessons found in these edits. That can be the right answer.</p>';
+    return;
+  }
+  const needsVoice = !r.voiceId && ((r.voiceCandidates || []).length || (r.contextCandidates || []).length);
+  body.innerHTML =
+    (needsVoice ? '<p class="hint">This document has no voice selected, so voice/context lessons cannot be saved. Pick a voice in the top bar first.</p>' : '') +
+    groups.filter((g) => g[1].length).map(([title, items, target]) => (
+      `<div class="learn-group"><h4>${escapeHtml(title)}</h4>` +
+      items.map((c, i) => (
+        `<div class="learn-card" data-target="${target}" data-i="${i}">` +
+          `<div class="learn-obs">${escapeHtml(c.observation || c.text)}</div>` +
+          (c.observation && c.text !== c.observation ? `<div class="learn-text">${escapeHtml(c.text)}</div>` : '') +
+          (c.subtype ? `<span class="learn-sub">${escapeHtml(c.subtype)}</span>` : '') +
+          `<div class="learn-actions"><button class="mini learn-keep">Keep</button><button class="mini learn-dismiss">Dismiss</button></div>` +
+        `</div>`
+      )).join('') + '</div>'
+    )).join('');
+  const pick = (target, i) => (({ voice: r.voiceCandidates, context: r.contextCandidates, claude: r.feedbackCandidates }[target]) || [])[i];
+  body.querySelectorAll('.learn-card').forEach((card) => {
+    const cand = pick(card.dataset.target, Number(card.dataset.i));
+    card.querySelector('.learn-keep').addEventListener('click', async () => {
+      try {
+        await api.json(`/api/docs/${currentId}/learn/apply`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voiceId: r.voiceId, candidate: cand }),
+        });
+        card.querySelector('.learn-actions').innerHTML = '<span class="hint">kept ✓</span>';
+        toast(card.dataset.target === 'claude' ? 'Saved to Claude feedback' : 'Added to your voice');
+      } catch (e) { toast('Could not keep: ' + e.message); }
+    });
+    card.querySelector('.learn-dismiss').addEventListener('click', () => {
+      card.querySelector('.learn-actions').innerHTML = '<span class="hint">dismissed</span>';
+    });
+  });
+}
+
 // boot
 initPicker();
 loadSkills();

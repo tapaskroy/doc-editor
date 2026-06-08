@@ -11,6 +11,8 @@ const claude = require('./lib/claude');
 const exporter = require('./lib/export');
 const skills = require('./lib/skills');
 const voicestore = require('./lib/voicestore');
+const learn = require('./lib/learn');
+const feedback = require('./lib/feedback');
 const attachments = require('./lib/attachments');
 const versions = require('./lib/versions');
 const mail = require('./lib/mail');
@@ -132,6 +134,32 @@ app.put('/api/docs/:id/voice', (req, res) => {
   if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
   const meta = docs.setVoice(req.params.id, (req.body || {}).voiceId || null);
   res.json({ ok: true, voice: meta.voice });
+});
+
+// --- Learn from my edits (the personalization loop) ----------------------
+// propose: classify the doc's edit history into candidates for the review gate.
+// apply: commit an approved candidate (voice/context -> voice store; claude ->
+// the feedback channel). Suggest-only: nothing is written until the user keeps it.
+app.post('/api/docs/:id/learn/propose', async (req, res) => {
+  if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
+  try {
+    const result = await learn.propose(req.params.id, { model: (req.body || {}).model });
+    if (result.usage) docs.addUsage(req.params.id, { op: 'learn', requested: (req.body || {}).model || '', ...result.usage });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/docs/:id/learn/apply', (req, res) => {
+  if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const { voiceId, candidate } = req.body || {};
+  const r = learn.applyCandidate(req.params.id, voiceId || docs.readMeta(req.params.id).voice || null, candidate);
+  res.status(r.ok ? 200 : 400).json(r);
+});
+
+app.get('/api/feedback', (req, res) => {
+  res.json({ items: feedback.list() });
 });
 
 app.get('/api/docs/:id', (req, res) => {

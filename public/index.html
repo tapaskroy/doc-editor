@@ -187,6 +187,12 @@
             </div>
           </div>
 
+          <div class="panel" id="learn-panel">
+            <h3>Voice learning</h3>
+            <p class="hint">Review what your recent edits could teach this doc's voice. Nothing is saved until you keep it.</p>
+            <button id="learn-btn" class="ghost">Learn from my edits</button>
+          </div>
+
           <div class="panel hidden" id="publish-panel">
             <h3>Publish</h3>
             <p class="hint">Output skills you have installed. These write or deploy, and pass through a review first.</p>
@@ -301,6 +307,18 @@
           <span class="spacer"></span>
           <button id="pub-go" class="primary">Publish</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Learn-from-my-edits review (the personalization loop) -->
+    <div id="learn-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>What I noticed in your edits</strong>
+          <button id="learn-close" class="ghost">Close</button>
+        </div>
+        <div id="learn-body" class="learn-body"></div>
+        <div class="modal-foot"><span id="learn-note" class="hint"></span></div>
       </div>
     </div>
 

@@ -263,15 +263,21 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
 function captureMemory(id) {
   const meta = docs.readMeta(id);
   if (!Array.isArray(meta.intake) || !meta.intake.length || meta.capturedAt) return;
+  // Stamp optimistically so a concurrent first-draft can't double-mine. On failure we
+  // CLEAR it again below, leaving the doc retryable on a later draft (a transient
+  // model/parse error must not permanently and silently suppress capture).
+  docs.setCapturedAt(id);
   learn.captureFromIntake(meta.intake)
     .then(({ facts, usage }) => {
       if (facts && facts.length) {
         memory.propose(facts.map((f) => ({ ...f, source: 'intake', provenance: `Learned from the planning conversation on "${meta.title}"` })));
       }
       if (usage) docs.addUsage(id, { op: 'capture', requested: 'haiku', ...usage });
-      docs.setCapturedAt(id);
     })
-    .catch((e) => console.error('memory capture failed:', e.message));
+    .catch((e) => {
+      console.error('memory capture failed:', e.message);
+      docs.setCapturedAt(id, null); // failed -> retryable next draft (not a silent permanent no-op)
+    });
 }
 
 // --- Generation (Server-Sent Events stream) ------------------------------
@@ -414,6 +420,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     // (never the raw transcript). Compute it once, lazily, then reuse until a
     // regenerate clears it.
     let summary = contextSummary;
+    let groundingDegraded = false;
     if (!summary && Array.isArray(intake) && intake.length) {
       try {
         const { summary: s, usage: du } = await claude.distillContext(intake);
@@ -423,7 +430,10 @@ app.post('/api/docs/:id/revise', async (req, res) => {
         }
         summary = s;
       } catch (e) {
+        // Best-effort grounding: proceed without it rather than failing the revise,
+        // but tell the client so it isn't a silent degradation (the "Bali" class).
         console.error('distillContext failed:', e.message);
+        groundingDegraded = true;
       }
     }
     const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, contextSummary: summary, memory: memNote, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
@@ -439,6 +449,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
       applied,
       history: meta.history,
       usage: meta.usage,
+      groundingDegraded,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -520,7 +531,8 @@ app.put('/api/memory/profile', (req, res) => {
 // View / edit / delete a topic file (the name is sanitized in lib/memory, so no
 // path traversal). Topics are the grow-without-bound facts retrieved per document.
 app.get('/api/memory/topic/:name', (req, res) => {
-  res.json({ name: req.params.name, markdown: memory.readTopic(req.params.name) });
+  // Return the sanitized name so the displayed title matches the file actually read.
+  res.json({ name: memory.sanitizeTopic(req.params.name), markdown: memory.readTopic(req.params.name) });
 });
 app.put('/api/memory/topic/:name', (req, res) => {
   memory.writeTopic(req.params.name, (req.body && req.body.markdown) || '');

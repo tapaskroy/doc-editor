@@ -127,11 +127,12 @@ test('usePersonalFacts defaults false and toggles (the per-doc output gate)', ()
   assert.equal(docs.setUsePersonalFacts(id, 1).usePersonalFacts, true); // coerced to boolean
 });
 
-test('capturedAt defaults null and is stamped once (capture-once guard)', () => {
+test('capturedAt defaults null, stamps, and clears (capture-once guard, retryable)', () => {
   const { id } = docs.create('x', { intake: [{ role: 'user', content: 'hi' }] });
   assert.equal(docs.readMeta(id).capturedAt, null);
   const t = docs.setCapturedAt(id).capturedAt;
   assert.ok(t && !Number.isNaN(Date.parse(t)));
+  assert.equal(docs.setCapturedAt(id, null).capturedAt, null); // cleared on failure -> retryable
 });
 
 test('remove() deletes both files', () => {

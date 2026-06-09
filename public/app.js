@@ -1734,6 +1734,7 @@ $('#revise-btn').addEventListener('click', async () => {
     if (res.usage) renderCost(res.usage);
     refreshVersions();
 
+    if (res.groundingDegraded) toast('Revised, but planning-context grounding was unavailable this time.', 5000);
     const ok = res.applied.filter((a) => a.ok).length;
     const failed = res.applied.filter((a) => !a.ok);
     highlightChanges(res.applied.filter((a) => a.ok && a.replace));
@@ -1865,8 +1866,26 @@ function renderLearn(r) {
 
 // ---- profile / personal memory -----------------------------------------
 
+// Strip the dangerous bits from rendered HTML before innerHTML. Memory content is
+// user-authored but ALSO LLM-written (capture) and writable by other tools via the
+// projected ~/.claude/USER.md, so treat it as untrusted. Not DOMPurify-grade, but it
+// removes the practical vectors: script/embed tags, on* handlers, javascript:/data: URLs.
+function sanitizeHtml(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  tpl.content.querySelectorAll('script, style, iframe, object, embed, link, meta, form').forEach((n) => n.remove());
+  tpl.content.querySelectorAll('*').forEach((el) => {
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase();
+      if (n.startsWith('on')) el.removeAttribute(a.name);
+      else if ((n === 'href' || n === 'src' || n === 'xlink:href') && /^\s*(javascript|data):/i.test(a.value)) el.removeAttribute(a.name);
+    }
+  });
+  return tpl.innerHTML;
+}
+
 function mdToHtml(md) {
-  try { if (window.marked) return window.marked.parse(md || ''); } catch { /* fall through */ }
+  try { if (window.marked) return sanitizeHtml(window.marked.parse(md || '')); } catch { /* fall through */ }
   return `<pre>${escapeHtml(md || '')}</pre>`;
 }
 
@@ -1921,7 +1940,14 @@ function renderMemory(data) {
     li.querySelector('.mem-discard').addEventListener('click', () => act('/api/memory/discard', li.dataset.id));
   });
   $('#mem-kept').querySelectorAll('.mem-item').forEach((li) => {
-    li.querySelector('.mem-forget').addEventListener('click', () => act('/api/memory/forget', li.dataset.id));
+    li.querySelector('.mem-forget').addEventListener('click', async () => {
+      try {
+        const r = await api.json('/api/memory/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: li.dataset.id }) });
+        if (r.item && r.item.removed === false) toast('Forgotten, but its exact line was not found in USER.md — edit the profile directly if it is still there.', 6000);
+        else toast('Forgotten');
+        showProfile();
+      } catch (e) { toast('Could not forget: ' + e.message); }
+    });
   });
   $('#mem-topics').querySelectorAll('.topic-chip').forEach((li) => {
     li.addEventListener('click', () => openTopic(li.dataset.topic));
@@ -2007,13 +2033,18 @@ async function renderDocMemory(id, data) {
     const bits = [ctx.memory.profile ? 'your profile' : 'no profile'];
     if (ctx.memory.topics.length) bits.push('topics: ' + ctx.memory.topics.join(', '));
     sum.textContent = 'Grounded in ' + bits.join(' · ') + '.';
-  } catch { sum.textContent = ''; }
+  } catch { if (currentId === id) sum.textContent = 'Could not load what this draft will use.'; }
 }
 $('#mem-use-facts').addEventListener('change', async () => {
   if (!currentId) return;
   try {
     await api.json(`/api/docs/${currentId}/use-personal-facts`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: $('#mem-use-facts').checked }) });
-  } catch (e) { toast('Could not update: ' + e.message); }
+  } catch (e) {
+    // Revert the checkbox to server truth — a swallowed failure here would leave this
+    // privacy control showing the opposite of what the server will actually do.
+    $('#mem-use-facts').checked = !$('#mem-use-facts').checked;
+    toast('Could not update: ' + e.message);
+  }
 });
 
 // boot

@@ -301,15 +301,22 @@ store is built (step 2), wired into generate/revise (step 3), fed by intake capt
   always-on core) + `topics/<topic>.md`. `memory.json` is **metadata only**
   (provenance + the unsaved review queue); the Markdown is authoritative for content
   (this is what avoids the `voice.json`/`SKILL.md` split-brain).
-- **Capture is suggest-only:** `propose()` queues candidates as `unsaved` (deduped);
-  `keep()` appends the fact to the right `USER.md` section (fixed taxonomy:
-  identity/people/work/taste/other) or topic file and marks it `kept`; `discard()`
-  tombstones; `forget()` removes a kept fact from the Markdown. Nothing reaches the
-  Markdown — or a prompt — until kept. The first capture SOURCE is
+- **Capture is suggest-only:** `propose()` queues candidates as `unsaved`, deduped
+  against the manifest **and** the canonical Markdown (the user may hand-edit the
+  files; Markdown is authoritative); `keep()` appends the fact to the right `USER.md`
+  section (fixed taxonomy: identity/people/work/taste/other) or topic file and marks
+  it `kept` — **idempotent** (won't double-append a fact already present, so a crash
+  between the two writes can't duplicate); `discard()` tombstones; `forget()` removes
+  a kept fact from the Markdown and returns whether the line was actually found (the
+  UI warns if it wasn't, rather than implying a fact is gone when it isn't). Nothing
+  reaches the Markdown — or a prompt — until kept. The first capture SOURCE is
   `learn.captureFromIntake()` (Haiku): after the FIRST draft, the server's
   `captureMemory()` mines the planning transcript for durable user facts (excluding
-  this-doc specifics), **non-blocking** and **once** (guarded by `meta.capturedAt`),
-  routing them to `propose()` with provenance. Browse/manage the queue via
+  this-doc specifics), **non-blocking** and **once** (guarded by `meta.capturedAt`,
+  stamped optimistically; **cleared again if the pass fails** so a transient model
+  error doesn't permanently/silently suppress capture), routing them to `propose()`
+  with provenance. A parse failure in `captureFromIntake` throws (distinct from an
+  empty result) so the failure is retryable rather than mistaken for "no facts". Browse/manage the queue via
   `GET /api/memory` + `POST /api/memory/{keep,discard,forget}`. (Routing the learn
   pipeline's edit-`context` candidates to memory is a deliberate follow-up — today
   they still go to the voice store.)
@@ -332,7 +339,10 @@ store is built (step 2), wired into generate/revise (step 3), fed by intake capt
   keep/discard queue, kept facts (forget), **clickable topic chips** (a modal to
   view/edit/delete each topic file — step 6), and the consented "Sync to ~/.claude"
   button. In the editor, a Personal-memory panel shows "what this draft will use"
-  and the per-doc personal-facts toggle. Routes: `GET /api/memory`,
+  and the per-doc personal-facts toggle (which reverts on a failed save so the
+  control never lies). Rendered memory Markdown is **sanitized** before `innerHTML`
+  (script/embed/on*/javascript: stripped) — it's user- *and* LLM-written, so treated
+  as untrusted. Routes: `GET /api/memory`,
   `POST /api/memory/{keep,discard,forget}`, `PUT /api/memory/profile`,
   `GET|PUT|DELETE /api/memory/topic/:name`, `POST /api/memory/sync`, plus
   `GET /api/docs/:id/context` and `PUT /api/docs/:id/use-personal-facts`.

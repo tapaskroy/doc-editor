@@ -86,6 +86,40 @@ test('topic files: write, read, list, delete', () => {
   assert.ok(!fs.existsSync(path.join(MEM, '..', 'evil.md')));
 });
 
+test('propose dedups against facts already in the canonical Markdown (not just the manifest)', () => {
+  mem.writeProfile('# USER.md\n\n## People\n- Has a spouse and one child.\n');
+  const added = mem.propose([{ text: 'has a spouse and ONE child.', section: 'people' }, { text: 'A brand new fact.' }]);
+  assert.equal(added.length, 1); // the one already in USER.md is dropped
+  assert.equal(added[0].text, 'A brand new fact.');
+});
+
+test('keep is idempotent — never double-appends a fact already in the Markdown', () => {
+  const [item] = mem.propose([{ text: 'Engineer.', section: 'work' }]); // not in markdown yet -> queued
+  mem.writeProfile('# USER.md\n\n## Work\n- Engineer.\n'); // appears by hand-edit/crash before keep
+  mem.keep(item.id);
+  assert.equal((mem.readProfile().match(/- Engineer\./g) || []).length, 1); // not duplicated
+  assert.equal(mem.listKept().length, 1);
+});
+
+test('forget reports whether the Markdown line was actually removed', () => {
+  const [a] = mem.propose([{ text: 'Has a cat.', section: 'other' }]);
+  mem.keep(a.id);
+  assert.equal(mem.forget(a.id).removed, true);
+  assert.doesNotMatch(mem.readProfile(), /Has a cat/);
+
+  const [b] = mem.propose([{ text: 'Has a dog.', section: 'other' }]);
+  mem.keep(b.id);
+  mem.writeProfile(mem.readProfile().replace('- Has a dog.', '- Has a dog named Rex.')); // drift
+  const r = mem.forget(b.id);
+  assert.equal(r.removed, false); // couldn't find the (drifted) line
+  assert.match(mem.readProfile(), /Rex/); // still present -> caller must warn, not claim success
+});
+
+test('sanitizeTopic is exported and strips path traversal', () => {
+  assert.equal(mem.sanitizeTopic('../../etc/passwd'), 'etc-passwd');
+  assert.equal(mem.sanitizeTopic('Travel Notes'), 'travel-notes');
+});
+
 test('retrieve returns the always-on profile plus relevant topics only', () => {
   mem.writeProfile('# USER.md\n\n## Identity\n- Tester.\n');
   mem.writeTopic('travel', '# Travel\n\n- Home base is the Bay Area; recent trip to Bali and Mount Batur.\n');

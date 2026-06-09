@@ -63,3 +63,23 @@ test('normalizeCandidates keeps valid candidates, drops noise/empty, guards fiel
     { target: 'context', subtype: null, observation: '', text: 'Family is small.' },
   ]);
 });
+
+test('normalizeFacts keeps durable facts, guards topic/section, drops empties', () => {
+  const out = learn.normalizeFacts({ facts: [
+    { text: 'Has a spouse and one child.', topic: 'profile', section: 'people' },
+    { text: 'Works at Globex as VP.', section: 'work' },                 // topic defaults to profile
+    { text: 'Loves historical dramas.', topic: 'taste', section: 'bogus' }, // bad section -> other
+    { text: '  ' },                                                      // empty -> dropped
+    { topic: 'profile', section: 'identity' },                           // no text -> dropped
+  ] });
+  assert.deepEqual(out, [
+    { text: 'Has a spouse and one child.', topic: 'profile', section: 'people' },
+    { text: 'Works at Globex as VP.', topic: 'profile', section: 'work' },
+    { text: 'Loves historical dramas.', topic: 'taste', section: 'other' },
+  ]);
+});
+
+test('captureFromIntake is a no-op without a transcript', async () => {
+  assert.deepEqual(await learn.captureFromIntake([]), { facts: [], usage: null });
+  assert.deepEqual(await learn.captureFromIntake(null), { facts: [], usage: null });
+});

@@ -115,10 +115,14 @@ Browser (:9999)  ──HTTP + SSE──►  Express server  ──spawn──►
      (`{title, summary, audience, purpose, tone, targetWords, keyPoints, structure}`),
      stored on the doc; the brief's `summary` becomes the premise (so history /
      the conversation panel reflect it). `targetWords` is derived from any
-     length/reading-time the user gave (~500 words/page, ~225 wpm).
+     length/reading-time the user gave (~500 words/page, ~225 wpm). The **raw
+     transcript is also persisted on the doc as `intake`** (the brief is lossy; the
+     transcript is the ground truth — see "Doc-specific context" below).
   3. Generation: if the doc has a `brief`, the route generates from
      `claude.briefToPrompt(brief)` (explicit constraints) instead of the bare
-     premise.
+     premise. If the doc has an `intake` transcript, it is **also passed to
+     `generate()` verbatim** ("conversation that shaped this document") so the
+     first draft never re-loses specifics the brief compressed away (the Bali bug).
   4. Length check is **client-side**: `updateLength()` counts words from the
      Markdown, shows "≈N words · ~M min", and — when a `targetWords` exists and
      actual is off by >15% — offers Expand/Trim, which is just a `revise()` call
@@ -268,6 +272,81 @@ pulled it back into prose mode and broke JSON parsing. Keeping the edit call
 reliable structured output and real memory. Don't reintroduce `--resume` for the
 revise path without solving that drift.
 
+### Doc-specific context (the "Bali fix", hybrid C)
+
+The compiled `brief` is lossy — it once dropped who-travelled facts the user stated
+in the planning conversation, so the draft fabricated them. The fix splits by path,
+because generate and revise have different constraints:
+
+- **`meta.intake`** stores the raw planning transcript. Generation gets it
+  **verbatim** (no JSON-mode risk in a streaming prose call), so the first draft has
+  the user's exact words.
+- **Revise must never see the raw transcript** (same drift reason as `--resume`
+  above). Instead `claude.distillContext(intake)` (Haiku) produces a compact,
+  fact-preserving **`meta.contextSummary`**, fed to `revise()` as grounding-only
+  BACKGROUND. It's computed lazily on the first revise and **cleared on regenerate**
+  (`docs.setContextSummary(id, null)`) so it re-distills against fresh text.
+
+This is step 1 of the personal-memory work (`specs/personal-memory-spec.md`,
+`design/personal-memory-design.md`); the durable cross-document layer comes next.
+
+### Personal memory (`lib/memory.js`) — the durable, cross-document layer
+
+The "what is true about me" store, sibling to the voice store ("how I write"). The
+store is built (step 2), wired into generate/revise (step 3), fed by intake capture
+(step 4), surfaced in a Profile tab (step 5), with editable topic files (step 6).
+
+- **Canonical content is portable Markdown the user owns**, OUTSIDE the repo:
+  `$DOC_EDITOR_MEMORY_DIR` (default `~/.config/doc-editor/memory/`) → `USER.md` (the
+  always-on core) + `topics/<topic>.md`. `memory.json` is **metadata only**
+  (provenance + the unsaved review queue); the Markdown is authoritative for content
+  (this is what avoids the `voice.json`/`SKILL.md` split-brain).
+- **Capture is suggest-only:** `propose()` queues candidates as `unsaved`, deduped
+  against the manifest **and** the canonical Markdown (the user may hand-edit the
+  files; Markdown is authoritative); `keep()` appends the fact to the right `USER.md`
+  section (fixed taxonomy: identity/people/work/taste/other) or topic file and marks
+  it `kept` — **idempotent** (won't double-append a fact already present, so a crash
+  between the two writes can't duplicate); `discard()` tombstones; `forget()` removes
+  a kept fact from the Markdown and returns whether the line was actually found (the
+  UI warns if it wasn't, rather than implying a fact is gone when it isn't). Nothing
+  reaches the Markdown — or a prompt — until kept. The first capture SOURCE is
+  `learn.captureFromIntake()` (Haiku): after the FIRST draft, the server's
+  `captureMemory()` mines the planning transcript for durable user facts (excluding
+  this-doc specifics), **non-blocking** and **once** (guarded by `meta.capturedAt`,
+  stamped optimistically; **cleared again if the pass fails** so a transient model
+  error doesn't permanently/silently suppress capture), routing them to `propose()`
+  with provenance. A parse failure in `captureFromIntake` throws (distinct from an
+  empty result) so the failure is retryable rather than mistaken for "no facts". Browse/manage the queue via
+  `GET /api/memory` + `POST /api/memory/{keep,discard,forget}`. (Routing the learn
+  pipeline's edit-`context` candidates to memory is a deliberate follow-up — today
+  they still go to the voice store.)
+- **Consumption is controlled:** `retrieve({premise,brief,recipients})` returns the
+  always-on `USER.md` plus only the topically-relevant files (v1 lexical overlap; a
+  Haiku-scored pass is the noted seam). `compose(retrieved,{usePersonalFacts})` builds
+  the injected block carrying the guardrail: grounding is always on; *volunteering*
+  private facts into the output is gated by the per-doc `usePersonalFacts` (default
+  off). This is the ONLY path memory takes into a prompt (hence the `--setting-sources`
+  exclusion above). The composed block is appended to the **writing system prompt**
+  (`generate()`/`revise()` take a `memory` param); the per-doc gate flips via
+  `PUT /api/docs/:id/use-personal-facts`; and `GET /api/docs/:id/context` exposes
+  exactly "what this draft will use" (voice + retrieved profile/topics + the gate)
+  for the transparency panel. Empty store ⇒ empty block ⇒ no-op (back-compatible).
+- **Projection (`syncToClaudeDir`, consented):** symlinks `USER.md` →
+  `~/.claude/USER.md` and adds an idempotent `@USER.md` import to `~/.claude/CLAUDE.md`
+  so the user's OTHER Claude sessions benefit. Decision A — it edits a file outside the
+  store, so it must be user-consented; overridable target via `DOC_EDITOR_CLAUDE_DIR`.
+- **UI (Profile tab, `#/profile`):** about-you (view/edit `USER.md`), the unsaved
+  keep/discard queue, kept facts (forget), **clickable topic chips** (a modal to
+  view/edit/delete each topic file — step 6), and the consented "Sync to ~/.claude"
+  button. In the editor, a Personal-memory panel shows "what this draft will use"
+  and the per-doc personal-facts toggle (which reverts on a failed save so the
+  control never lies). Rendered memory Markdown is **sanitized** before `innerHTML`
+  (script/embed/on*/javascript: stripped) — it's user- *and* LLM-written, so treated
+  as untrusted. Routes: `GET /api/memory`,
+  `POST /api/memory/{keep,discard,forget}`, `PUT /api/memory/profile`,
+  `GET|PUT|DELETE /api/memory/topic/:name`, `POST /api/memory/sync`, plus
+  `GET /api/docs/:id/context` and `PUT /api/docs/:id/use-personal-facts`.
+
 The reviser also has a tolerant JSON extractor (handles stray text / code fences)
 and a single sterner retry, as belt-and-suspenders against occasional drift.
 
@@ -301,6 +380,18 @@ All flags live in `lib/claude.js`. Things that are load-bearing:
   to the project cwd.** Attachment files (under the project) are reached via
   `--add-dir <doc's asset dir>`, passed only when references are present, since
   we're no longer in the project tree.
+- **Writing spawns pass `--setting-sources project,local` (load-bearing).** This
+  loads only the project+local setting/memory sources and excludes `user`, so the
+  USER-level `~/.claude/CLAUDE.md` (and its `@USER.md` personal-memory import) is
+  **not** auto-loaded into writing calls — `RUN_DIR` only ever blocked the *project*
+  CLAUDE.md. The personal-memory profile must enter the prompt **only** via the
+  guardrailed `memory.compose()` path (see `lib/memory.js`), never as an un-scoped
+  auto-load that would also bypass the leakage guardrail. **Do NOT switch to
+  `--bare`**: it skips keychain reads and breaks subscription auth (`apiKeySource:
+  none` → "Not logged in"); `--setting-sources` leaves auth untouched (verified).
+  Subtlety: this also skips the user's *settings.json* for writing calls (model/
+  effort/permissions), which is fine — those calls are fully parameterized by the
+  app. (Mail spawns keep all sources; they need user-level MCP config.)
 
 ## Export (`lib/export.js`, `GET /api/docs/:id/export?format=…`)
 
@@ -414,6 +505,8 @@ recent Primary threads (provider-agnostic; Gmail `in:inbox category:primary`).
   "title": "Derived from the first H1",
   "premise": "the original request",
   "history": [{ "role": "user", "content": "…" }],
+  "intake": [{ "role": "user", "content": "…" }],   // raw planning transcript, or null
+  "contextSummary": "distilled facts from intake, for revise (lazy; cleared on regenerate)",
   "createdAt": "ISO", "updatedAt": "ISO"
 }
 ```

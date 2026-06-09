@@ -120,6 +120,7 @@ function route() {
   const m = hash.match(/^#\/doc\/(.+)$/);
   if (m) showEditor(m[1]);
   else if (hash === '#/mail') showMail();
+  else if (hash === '#/profile') showProfile();
   else if (hash === '#/brief') showBrief();
   else showHome();
 }
@@ -136,9 +137,11 @@ function show(view) {
   $('#view-mail').classList.toggle('hidden', view !== 'mail');
   $('#view-brief').classList.toggle('hidden', view !== 'brief');
   $('#view-editor').classList.toggle('hidden', view !== 'editor');
+  $('#view-profile').classList.toggle('hidden', view !== 'profile');
   // Default the surface switch to the view; showEditor refines it for emails.
   $('#nav-mail').classList.toggle('active', view === 'mail');
-  $('#nav-docs').classList.toggle('active', view !== 'mail');
+  $('#nav-profile').classList.toggle('active', view === 'profile');
+  $('#nav-docs').classList.toggle('active', view !== 'mail' && view !== 'profile');
 }
 
 // ---- home ---------------------------------------------------------------
@@ -991,6 +994,8 @@ async function showEditor(id) {
   settings.skill = data.voice || '';
   $('#sel-style').value = settings.skill;
 
+  renderDocMemory(id, data);
+
   if (!data.markdown.trim()) {
     // Freshly created — stream the first draft from its premise/brief.
     $('#length-panel').classList.add('hidden');
@@ -1729,6 +1734,7 @@ $('#revise-btn').addEventListener('click', async () => {
     if (res.usage) renderCost(res.usage);
     refreshVersions();
 
+    if (res.groundingDegraded) toast('Revised, but planning-context grounding was unavailable this time.', 5000);
     const ok = res.applied.filter((a) => a.ok).length;
     const failed = res.applied.filter((a) => !a.ok);
     highlightChanges(res.applied.filter((a) => a.ok && a.replace));
@@ -1857,6 +1863,189 @@ function renderLearn(r) {
     });
   });
 }
+
+// ---- profile / personal memory -----------------------------------------
+
+// Strip the dangerous bits from rendered HTML before innerHTML. Memory content is
+// user-authored but ALSO LLM-written (capture) and writable by other tools via the
+// projected ~/.claude/USER.md, so treat it as untrusted. Not DOMPurify-grade, but it
+// removes the practical vectors: script/embed tags, on* handlers, javascript:/data: URLs.
+function sanitizeHtml(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  tpl.content.querySelectorAll('script, style, iframe, object, embed, link, meta, form').forEach((n) => n.remove());
+  tpl.content.querySelectorAll('*').forEach((el) => {
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase();
+      if (n.startsWith('on')) el.removeAttribute(a.name);
+      else if ((n === 'href' || n === 'src' || n === 'xlink:href') && /^\s*(javascript|data):/i.test(a.value)) el.removeAttribute(a.name);
+    }
+  });
+  return tpl.innerHTML;
+}
+
+function mdToHtml(md) {
+  try { if (window.marked) return sanitizeHtml(window.marked.parse(md || '')); } catch { /* fall through */ }
+  return `<pre>${escapeHtml(md || '')}</pre>`;
+}
+
+async function showProfile() {
+  show('profile');
+  setStatus('');
+  try {
+    renderMemory(await api.json('/api/memory'));
+  } catch (e) {
+    toast('Could not load memory: ' + e.message);
+  }
+}
+
+function renderMemory(data) {
+  const queue = data.queue || [];
+  const kept = data.kept || [];
+  $('#mem-queue-count').textContent = queue.length;
+  $('#mem-kept-count').textContent = kept.length;
+
+  $('#mem-queue').innerHTML = queue.length
+    ? queue.map((it) => (
+        `<li class="mem-item" data-id="${it.id}">` +
+          `<div class="mem-text">${escapeHtml(it.text)}</div>` +
+          `<div class="mem-meta">${escapeHtml(it.topic)}${it.topic === 'profile' && it.section ? ' · ' + escapeHtml(it.section) : ''}${it.provenance ? ' · ' + escapeHtml(it.provenance) : ''}</div>` +
+          `<div class="mem-actions"><button class="mini mem-keep">Keep</button><button class="mini mem-discard">Discard</button></div>` +
+        `</li>`
+      )).join('')
+    : '<li class="hint">Nothing waiting. Facts appear here after you plan a document with “Let\'s talk about it first.”</li>';
+
+  $('#mem-kept').innerHTML = kept.length
+    ? kept.map((it) => (
+        `<li class="mem-item" data-id="${it.id}"><div class="mem-text">${escapeHtml(it.text)}</div>` +
+        `<div class="mem-actions"><button class="mini mem-forget">Forget</button></div></li>`
+      )).join('')
+    : '<li class="hint">No facts kept yet.</li>';
+
+  $('#mem-topics').innerHTML = (data.topics || []).length
+    ? data.topics.map((t) => `<li class="chip topic-chip" data-topic="${escapeHtml(t)}" title="View or edit this topic">${escapeHtml(t)}</li>`).join('')
+    : '<li class="hint">none</li>';
+
+  $('#mem-profile-view').innerHTML = data.profile ? mdToHtml(data.profile) : '<p class="hint">No profile yet. Keep a fact, or click edit to write one.</p>';
+  $('#mem-profile-text').value = data.profile || '';
+  $('#mem-profile-editor').classList.add('hidden');
+  $('#mem-profile-view').classList.remove('hidden');
+
+  const act = async (url, id) => {
+    try { await api.json(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); showProfile(); }
+    catch (e) { toast('Failed: ' + e.message); }
+  };
+  $('#mem-queue').querySelectorAll('.mem-item').forEach((li) => {
+    li.querySelector('.mem-keep').addEventListener('click', () => act('/api/memory/keep', li.dataset.id));
+    li.querySelector('.mem-discard').addEventListener('click', () => act('/api/memory/discard', li.dataset.id));
+  });
+  $('#mem-kept').querySelectorAll('.mem-item').forEach((li) => {
+    li.querySelector('.mem-forget').addEventListener('click', async () => {
+      try {
+        const r = await api.json('/api/memory/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: li.dataset.id }) });
+        if (r.item && r.item.removed === false) toast('Forgotten, but its exact line was not found in USER.md — edit the profile directly if it is still there.', 6000);
+        else toast('Forgotten');
+        showProfile();
+      } catch (e) { toast('Could not forget: ' + e.message); }
+    });
+  });
+  $('#mem-topics').querySelectorAll('.topic-chip').forEach((li) => {
+    li.addEventListener('click', () => openTopic(li.dataset.topic));
+  });
+}
+
+// Topic file viewer/editor (step 6): click a topic chip to read/edit/delete it.
+let currentTopic = null;
+async function openTopic(name) {
+  try {
+    const r = await api.json(`/api/memory/topic/${encodeURIComponent(name)}`);
+    currentTopic = name;
+    $('#topic-modal-title').textContent = 'Topic: ' + name;
+    $('#topic-text').value = r.markdown || '';
+    $('#topic-modal').classList.remove('hidden');
+    $('#topic-text').focus();
+  } catch (e) { toast('Could not open topic: ' + e.message); }
+}
+$('#topic-close').addEventListener('click', () => $('#topic-modal').classList.add('hidden'));
+$('#topic-modal').addEventListener('click', (e) => { if (e.target.id === 'topic-modal') $('#topic-modal').classList.add('hidden'); });
+$('#topic-save').addEventListener('click', async () => {
+  if (!currentTopic) return;
+  try {
+    await api.json(`/api/memory/topic/${encodeURIComponent(currentTopic)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: $('#topic-text').value }) });
+    toast('Topic saved');
+    $('#topic-modal').classList.add('hidden');
+    showProfile();
+  } catch (e) { toast('Could not save: ' + e.message); }
+});
+$('#topic-delete').addEventListener('click', async () => {
+  if (!currentTopic) return;
+  try {
+    await api.json(`/api/memory/topic/${encodeURIComponent(currentTopic)}`, { method: 'DELETE' });
+    toast('Topic deleted');
+    $('#topic-modal').classList.add('hidden');
+    showProfile();
+  } catch (e) { toast('Could not delete: ' + e.message); }
+});
+
+// Static profile controls (wired once).
+$('#mem-profile-edit').addEventListener('click', () => {
+  $('#mem-profile-view').classList.add('hidden');
+  $('#mem-profile-editor').classList.remove('hidden');
+  $('#mem-profile-text').focus();
+});
+$('#mem-profile-cancel').addEventListener('click', () => {
+  $('#mem-profile-editor').classList.add('hidden');
+  $('#mem-profile-view').classList.remove('hidden');
+});
+$('#mem-profile-save').addEventListener('click', async () => {
+  try {
+    await api.json('/api/memory/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: $('#mem-profile-text').value }) });
+    toast('Profile saved');
+    showProfile();
+  } catch (e) { toast('Could not save: ' + e.message); }
+});
+$('#mem-sync').addEventListener('click', async () => {
+  const btn = $('#mem-sync');
+  btn.disabled = true;
+  try {
+    const r = await api.json('/api/memory/sync', { method: 'POST' });
+    $('#mem-sync-state').textContent = `Linked ${r.link} (${r.linkMode}); ${r.importMode}.`;
+    toast('Synced to ~/.claude');
+  } catch (e) {
+    $('#mem-sync-state').textContent = 'Sync failed: ' + e.message;
+    toast('Sync failed: ' + e.message);
+  } finally { btn.disabled = false; }
+});
+
+// Per-document memory panel in the editor: the output-facts toggle + a summary of
+// what this draft will use. Called from showEditor; data is the loaded doc meta.
+async function renderDocMemory(id, data) {
+  $('#mem-use-facts').checked = !!data.usePersonalFacts;
+  const sum = $('#mem-doc-summary');
+  sum.textContent = 'Checking what this draft will use…';
+  try {
+    const ctx = await api.json(`/api/docs/${id}/context`);
+    if (currentId !== id) return; // navigated away mid-fetch
+    if (!ctx.memory.enabled) {
+      sum.textContent = 'No personal memory yet. Plan a doc with “Let\'s talk about it first,” then keep facts in Profile.';
+      return;
+    }
+    const bits = [ctx.memory.profile ? 'your profile' : 'no profile'];
+    if (ctx.memory.topics.length) bits.push('topics: ' + ctx.memory.topics.join(', '));
+    sum.textContent = 'Grounded in ' + bits.join(' · ') + '.';
+  } catch { if (currentId === id) sum.textContent = 'Could not load what this draft will use.'; }
+}
+$('#mem-use-facts').addEventListener('change', async () => {
+  if (!currentId) return;
+  try {
+    await api.json(`/api/docs/${currentId}/use-personal-facts`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: $('#mem-use-facts').checked }) });
+  } catch (e) {
+    // Revert the checkbox to server truth — a swallowed failure here would leave this
+    // privacy control showing the opposite of what the server will actually do.
+    $('#mem-use-facts').checked = !$('#mem-use-facts').checked;
+    toast('Could not update: ' + e.message);
+  }
+});
 
 // boot
 initPicker();

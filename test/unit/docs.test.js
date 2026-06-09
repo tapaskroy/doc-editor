@@ -94,6 +94,47 @@ test('addUsage appends timestamped usage events', () => {
   assert.equal(u.filter((e) => e.op === 'revise').length, 2);
 });
 
+test('create() persists the intake transcript; bare docs have intake:null', () => {
+  const intake = [
+    { role: 'user', content: 'recap our trip' },
+    { role: 'assistant', content: 'Who went, and how long?' },
+    { role: 'user', content: 'my family and I, 8 days in Bali' },
+  ];
+  const withIntake = docs.create('recap', { intake });
+  assert.deepEqual(withIntake.intake, intake);
+  assert.equal(withIntake.contextSummary, null);
+
+  const bare = docs.create('plain');
+  assert.equal(bare.intake, null);
+  assert.equal(bare.contextSummary, null);
+
+  // empty transcript is treated as no intake
+  assert.equal(docs.create('p', { intake: [] }).intake, null);
+});
+
+test('setContextSummary stores and clears the distilled summary', () => {
+  const { id } = docs.create('x', { intake: [{ role: 'user', content: 'hi' }] });
+  assert.equal(docs.setContextSummary(id, 'Family trip, 8 days, Bali.').contextSummary, 'Family trip, 8 days, Bali.');
+  assert.equal(docs.setContextSummary(id, null).contextSummary, null); // cleared (e.g. on regenerate)
+  assert.equal(docs.setContextSummary(id, '').contextSummary, null); // empty also clears
+});
+
+test('usePersonalFacts defaults false and toggles (the per-doc output gate)', () => {
+  const { id } = docs.create('x');
+  assert.equal(docs.readMeta(id).usePersonalFacts, false);
+  assert.equal(docs.setUsePersonalFacts(id, true).usePersonalFacts, true);
+  assert.equal(docs.setUsePersonalFacts(id, false).usePersonalFacts, false);
+  assert.equal(docs.setUsePersonalFacts(id, 1).usePersonalFacts, true); // coerced to boolean
+});
+
+test('capturedAt defaults null, stamps, and clears (capture-once guard, retryable)', () => {
+  const { id } = docs.create('x', { intake: [{ role: 'user', content: 'hi' }] });
+  assert.equal(docs.readMeta(id).capturedAt, null);
+  const t = docs.setCapturedAt(id).capturedAt;
+  assert.ok(t && !Number.isNaN(Date.parse(t)));
+  assert.equal(docs.setCapturedAt(id, null).capturedAt, null); // cleared on failure -> retryable
+});
+
 test('remove() deletes both files', () => {
   const { id } = docs.create('x');
   docs.setMarkdown(id, '# X');

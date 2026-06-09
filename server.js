@@ -11,6 +11,7 @@ const claude = require('./lib/claude');
 const exporter = require('./lib/export');
 const skills = require('./lib/skills');
 const voicestore = require('./lib/voicestore');
+const memory = require('./lib/memory');
 const learn = require('./lib/learn');
 const feedback = require('./lib/feedback');
 const attachments = require('./lib/attachments');
@@ -78,7 +79,9 @@ app.get('/api/skills', (req, res) => {
 
 app.post('/api/docs', async (req, res) => {
   const { premise = '', intake, intakeUsage, model, effort, kind, email, voice } = req.body || {};
-  let meta = docs.create(premise, { kind, email, voice });
+  // Persist the raw planning transcript on the doc so generation can ground on it
+  // verbatim (and revise on a distilled summary of it) — see hybrid C.
+  let meta = docs.create(premise, { kind, email, voice, intake });
   // Carry over the cost of the briefing interview turns (run before the doc existed).
   if (Array.isArray(intakeUsage) && intakeUsage.length) {
     meta = docs.addUsage(meta.id, intakeUsage.map((u) => ({ op: 'briefing', requested: model || '', ...u })));
@@ -253,19 +256,52 @@ app.delete('/api/docs/:id/history/:index', (req, res) => {
   res.json({ history: meta.history });
 });
 
+// Mine a doc's planning transcript for durable user facts and offer them to the
+// personal-memory review queue (suggest-only). Fire-and-forget, runs once per doc
+// (guarded by meta.capturedAt), never blocks the draft response. No-op without an
+// intake transcript.
+function captureMemory(id) {
+  const meta = docs.readMeta(id);
+  if (!Array.isArray(meta.intake) || !meta.intake.length || meta.capturedAt) return;
+  // Stamp optimistically so a concurrent first-draft can't double-mine. On failure we
+  // CLEAR it again below, leaving the doc retryable on a later draft (a transient
+  // model/parse error must not permanently and silently suppress capture).
+  docs.setCapturedAt(id);
+  learn.captureFromIntake(meta.intake)
+    .then(({ facts, usage }) => {
+      if (facts && facts.length) {
+        memory.propose(facts.map((f) => ({ ...f, source: 'intake', provenance: `Learned from the planning conversation on "${meta.title}"` })));
+      }
+      if (usage) docs.addUsage(id, { op: 'capture', requested: 'haiku', ...usage });
+    })
+    .catch((e) => {
+      console.error('memory capture failed:', e.message);
+      docs.setCapturedAt(id, null); // failed -> retryable next draft (not a silent permanent no-op)
+    });
+}
+
 // --- Generation (Server-Sent Events stream) ------------------------------
 
 app.get('/api/docs/:id/generate', (req, res) => {
   const { id } = req.params;
   if (!docs.exists(id)) return res.status(404).end();
-  const { premise, brief, attachments: atts = [], kind, email, voice } = docs.readMeta(id);
+  const { premise, brief, attachments: atts = [], kind, email, voice, intake, usePersonalFacts } = docs.readMeta(id);
   const { model, effort } = req.query;
   let web = req.query.web === 'true';
   // Per-document voice takes precedence; the ?skill= query is a legacy fallback.
   const voiceId = voice || req.query.skill || null;
   const style = voiceId ? voicestore.compose(voiceId) : null;
   const references = attachments.referenceBlock(id, atts);
+  // Personal memory: ground the draft in the relevant slice of the user's profile,
+  // carrying the leakage guardrail (volunteering gated by the per-doc toggle). Empty
+  // when there is no store, so this is a no-op until memory is set up.
+  const recipients = kind === 'email' && email?.envelope?.to ? email.envelope.to : [];
+  const memNote = memory.compose(memory.retrieve({ premise, brief, recipients }), { usePersonalFacts });
   const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
+  // Regenerating produces fresh document text, so any distilled context summary is
+  // now potentially stale — clear it so the next revise re-distills (the freshness
+  // rule for hybrid C).
+  if (op === 'regenerate') docs.setContextSummary(id, null);
   // A briefed doc generates from its structured brief; otherwise from the premise.
   let genPrompt = brief ? claude.briefToPrompt(brief) : premise;
 
@@ -299,6 +335,8 @@ app.get('/api/docs/:id/generate', (req, res) => {
     style,
     references,
     kind,
+    intake,
+    memory: memNote,
     addDir: references ? attachments.docDir(id) : null,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),
@@ -308,6 +346,9 @@ app.get('/api/docs/:id/generate', (req, res) => {
       versions.add(id, { label: op === 'draft' ? 'Draft' : 'Regenerated', kind: 'ai', model: usage.model, usd: usage.usd, markdown, voice: voiceId });
       send('done', { markdown, html: render(markdown), title: meta.title, history: meta.history, usage: meta.usage });
       res.end();
+      // After the first draft, mine the planning transcript for durable user facts
+      // (non-blocking, suggest-only -> the unsaved memory queue). Never on regenerate.
+      if (op === 'draft') captureMemory(id);
     },
     onError: (message) => {
       send('error', { message });
@@ -368,11 +409,34 @@ app.post('/api/docs/:id/revise', async (req, res) => {
 
   try {
     const markdown = docs.getMarkdown(id);
-    const { history = [], attachments: atts = [], voice } = docs.readMeta(id);
+    const { history = [], attachments: atts = [], voice, intake, contextSummary, premise, brief, kind, email, usePersonalFacts } = docs.readMeta(id);
     const voiceId = voice || skill || null;
     const style = voiceId ? voicestore.compose(voiceId) : null;
     const references = attachments.referenceBlock(id, atts);
-    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
+    // Same personal-memory grounding as generation (guardrail applies to edits too).
+    const recipients = kind === 'email' && email?.envelope?.to ? email.envelope.to : [];
+    const memNote = memory.compose(memory.retrieve({ premise, brief, recipients }), { usePersonalFacts });
+    // Hybrid C: ground revisions on a distilled summary of the planning transcript
+    // (never the raw transcript). Compute it once, lazily, then reuse until a
+    // regenerate clears it.
+    let summary = contextSummary;
+    let groundingDegraded = false;
+    if (!summary && Array.isArray(intake) && intake.length) {
+      try {
+        const { summary: s, usage: du } = await claude.distillContext(intake);
+        if (s) {
+          docs.setContextSummary(id, s);
+          docs.addUsage(id, { op: 'distill', requested: 'haiku', ...du });
+        }
+        summary = s;
+      } catch (e) {
+        // Best-effort grounding: proceed without it rather than failing the revise,
+        // but tell the client so it isn't a silent degradation (the "Bali" class).
+        console.error('distillContext failed:', e.message);
+        groundingDegraded = true;
+      }
+    }
+    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, contextSummary: summary, memory: memNote, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);
@@ -385,9 +449,109 @@ app.post('/api/docs/:id/revise', async (req, res) => {
       applied,
       history: meta.history,
       usage: meta.usage,
+      groundingDegraded,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Personal memory: per-doc output gate + transparency -----------------
+
+// Toggle whether this doc may surface known personal facts in its OUTPUT (the
+// per-doc half of the leakage guardrail). Grounding is always on regardless.
+app.put('/api/docs/:id/use-personal-facts', (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const meta = docs.setUsePersonalFacts(id, !!(req.body && req.body.on));
+  res.json({ usePersonalFacts: meta.usePersonalFacts });
+});
+
+// "What this draft will use": the exact context fed to generation/revision —
+// the active voice, the retrieved memory (profile + relevant topic names), whether
+// a planning transcript is attached, and the output-facts gate. Powers the
+// transparency panel (input-transparency half of the guardrail).
+app.get('/api/docs/:id/context', (req, res) => {
+  const { id } = req.params;
+  if (!docs.exists(id)) return res.status(404).json({ error: 'not found' });
+  const { premise, brief, voice, kind, email, intake, usePersonalFacts } = docs.readMeta(id);
+  const recipients = kind === 'email' && email?.envelope?.to ? email.envelope.to : [];
+  const retrieved = memory.retrieve({ premise, brief, recipients });
+  res.json({
+    voice: voice || null,
+    usePersonalFacts: !!usePersonalFacts,
+    hasIntake: Array.isArray(intake) && intake.length > 0,
+    memory: {
+      enabled: memory.storeExists(),
+      profile: retrieved.profile || '',
+      topics: retrieved.topics.map((t) => t.name),
+    },
+  });
+});
+
+// --- Personal memory: browse the store + review the unsaved queue ---------
+// (The Profile-tab UI is step 5; these backend routes back it and let capture be
+// verified now. Keep/discard/forget are the consent gate — suggest-only capture
+// never reaches the Markdown until kept here.)
+
+app.get('/api/memory', (req, res) => {
+  res.json({
+    enabled: memory.storeExists(),
+    profile: memory.readProfile(),
+    topics: memory.listTopics(),
+    queue: memory.listQueue(), // unsaved candidates awaiting keep/discard
+    kept: memory.listKept(),
+  });
+});
+
+app.post('/api/memory/keep', (req, res) => {
+  const item = memory.keep((req.body || {}).id);
+  if (!item) return res.status(404).json({ error: 'item not found or not unsaved' });
+  res.json({ item });
+});
+
+app.post('/api/memory/discard', (req, res) => {
+  const item = memory.discard((req.body || {}).id);
+  if (!item) return res.status(404).json({ error: 'item not found' });
+  res.json({ item });
+});
+
+app.post('/api/memory/forget', (req, res) => {
+  const item = memory.forget((req.body || {}).id);
+  if (!item) return res.status(404).json({ error: 'item not found' });
+  res.json({ item });
+});
+
+// Edit the canonical profile (USER.md) directly.
+app.put('/api/memory/profile', (req, res) => {
+  memory.writeProfile((req.body && req.body.markdown) || '');
+  res.json({ ok: true });
+});
+
+// View / edit / delete a topic file (the name is sanitized in lib/memory, so no
+// path traversal). Topics are the grow-without-bound facts retrieved per document.
+app.get('/api/memory/topic/:name', (req, res) => {
+  // Return the sanitized name so the displayed title matches the file actually read.
+  res.json({ name: memory.sanitizeTopic(req.params.name), markdown: memory.readTopic(req.params.name) });
+});
+app.put('/api/memory/topic/:name', (req, res) => {
+  memory.writeTopic(req.params.name, (req.body && req.body.markdown) || '');
+  res.json({ ok: true });
+});
+app.delete('/api/memory/topic/:name', (req, res) => {
+  memory.deleteTopic(req.params.name);
+  res.json({ ok: true });
+});
+
+// Project the profile to ~/.claude so the user's OTHER Claude sessions benefit
+// (Decision A). Consented: only invoked from the Profile tab's explicit button.
+app.post('/api/memory/sync', (req, res) => {
+  try {
+    const r = memory.syncToClaudeDir();
+    if (!r.ok) return res.status(409).json(r); // e.g. a real ~/.claude/USER.md is in the way
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

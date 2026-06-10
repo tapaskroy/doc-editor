@@ -325,6 +325,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
   // when there is no store, so this is a no-op until memory is set up.
   const recipients = kind === 'email' && email?.envelope?.to ? email.envelope.to : [];
   const memNote = memory.compose(memory.retrieve({ premise, brief, recipients }), { usePersonalFacts });
+  const guardrails = feedback.compose(); // kept Claude-corrections, injected as "avoid these"
   const op = docs.getMarkdown(id).trim() ? 'regenerate' : 'draft';
   // Regenerating produces fresh document text, so any distilled context summary is
   // now potentially stale — clear it so the next revise re-distills (the freshness
@@ -365,6 +366,7 @@ app.get('/api/docs/:id/generate', (req, res) => {
     kind,
     intake,
     memory: memNote,
+    guardrails,
     addDir: references ? attachments.docDir(id) : null,
     onReset: () => send('reset', {}),
     onDelta: (text) => send('delta', { text }),
@@ -444,6 +446,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
     // Same personal-memory grounding as generation (guardrail applies to edits too).
     const recipients = kind === 'email' && email?.envelope?.to ? email.envelope.to : [];
     const memNote = memory.compose(memory.retrieve({ premise, brief, recipients }), { usePersonalFacts });
+  const guardrails = feedback.compose(); // kept Claude-corrections, injected as "avoid these"
     // Hybrid C: ground revisions on a distilled summary of the planning transcript
     // (never the raw transcript). Compute it once, lazily, then reuse until a
     // regenerate clears it.
@@ -464,7 +467,7 @@ app.post('/api/docs/:id/revise', async (req, res) => {
         groundingDegraded = true;
       }
     }
-    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, contextSummary: summary, memory: memNote, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
+    const { edits, request, usage } = await claude.revise({ markdown, comments, instruction, history, contextSummary: summary, memory: memNote, guardrails, model, effort, web, style, references, addDir: references ? attachments.docDir(id) : null });
     const { markdown: updated, applied } = claude.applyEdits(markdown, edits);
     docs.addHistory(id, request); // record this turn so future revisions remember it
     docs.setMarkdown(id, updated);

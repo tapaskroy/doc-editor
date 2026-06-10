@@ -317,9 +317,14 @@ store is built (step 2), wired into generate/revise (step 3), fed by intake capt
   error doesn't permanently/silently suppress capture), routing them to `propose()`
   with provenance. A parse failure in `captureFromIntake` throws (distinct from an
   empty result) so the failure is retryable rather than mistaken for "no facts". Browse/manage the queue via
-  `GET /api/memory` + `POST /api/memory/{keep,discard,forget}`. (Routing the learn
-  pipeline's edit-`context` candidates to memory is a deliberate follow-up — today
-  they still go to the voice store.)
+  `GET /api/memory` + `POST /api/memory/{keep,discard,forget}`.
+- **Keeping a learn proposal routes by class, and all three now change future output**
+  (`learn.applyCandidate`): **voice** → the voice store as an active rule (injected by
+  `voicestore.compose`); **context** → personal memory, kept immediately (grounds future
+  writing via `memory.compose` — no voice required); **claude-correction** → the
+  feedback channel, which `feedback.compose()` injects into generate/revise as an
+  "avoid these" block. (Previously context lessons went to the voice store, where
+  `compose` ignored them, so keeping one silently did nothing.)
 - **Consumption is controlled:** `retrieve({premise,brief,recipients})` returns the
   always-on `USER.md` plus only the topically-relevant files (v1 lexical overlap; a
   Haiku-scored pass is the noted seam). `compose(retrieved,{usePersonalFacts})` builds

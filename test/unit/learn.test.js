@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 process.env.DOC_EDITOR_SKILLS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'de-learn-sk-'));
 process.env.DOC_EDITOR_DOCS_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'de-learn-dk-'));
+process.env.DOC_EDITOR_MEMORY_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'de-learn-mem-'));
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -82,4 +83,23 @@ test('normalizeFacts keeps durable facts, guards topic/section, drops empties', 
 test('captureFromIntake is a no-op without a transcript', async () => {
   assert.deepEqual(await learn.captureFromIntake([]), { facts: [], usage: null });
   assert.deepEqual(await learn.captureFromIntake(null), { facts: [], usage: null });
+});
+
+test('applyCandidate routes a context candidate to memory (not the voice store)', () => {
+  const docs = require('../../lib/docs');
+  const memory = require('../../lib/memory');
+  const { id } = docs.create('My quarterly report');
+  // No voiceId passed — context must not require one (it goes to global memory).
+  const r = learn.applyCandidate(id, null, { target: 'context', observation: 'Works at Globex.', text: 'Works at Globex.' });
+  assert.equal(r.ok, true);
+  assert.equal(r.where, 'memory');
+  assert.match(memory.readProfile(), /Works at Globex\./); // kept into USER.md
+});
+
+test('applyCandidate still requires a voice for a voice candidate', () => {
+  const docs = require('../../lib/docs');
+  const { id } = docs.create('doc');
+  const r = learn.applyCandidate(id, null, { target: 'voice', text: 'Prefer short sentences.' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /no voice/);
 });

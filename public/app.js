@@ -1831,9 +1831,10 @@ function renderLearn(r) {
     body.innerHTML = '<p class="hint">No durable lessons found in these edits. That can be the right answer.</p>';
     return;
   }
-  const needsVoice = !r.voiceId && ((r.voiceCandidates || []).length || (r.contextCandidates || []).length);
+  // Only VOICE lessons need a voice; context now goes to memory and claude to feedback.
+  const needsVoice = !r.voiceId && (r.voiceCandidates || []).length;
   body.innerHTML =
-    (needsVoice ? '<p class="hint">This document has no voice selected, so voice/context lessons cannot be saved. Pick a voice in the top bar first.</p>' : '') +
+    (needsVoice ? '<p class="hint">This document has no voice selected, so voice lessons can\'t be saved. Pick a voice in the top bar first. (Context and correction lessons still work.)</p>' : '') +
     groups.filter((g) => g[1].length).map(([title, items, target]) => (
       `<div class="learn-group"><h4>${escapeHtml(title)}</h4>` +
       items.map((c, i) => (
@@ -1850,12 +1851,13 @@ function renderLearn(r) {
     const cand = pick(card.dataset.target, Number(card.dataset.i));
     card.querySelector('.learn-keep').addEventListener('click', async () => {
       try {
-        await api.json(`/api/docs/${currentId}/learn/apply`, {
+        const resp = await api.json(`/api/docs/${currentId}/learn/apply`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ voiceId: r.voiceId, candidate: cand }),
         });
         card.querySelector('.learn-actions').innerHTML = '<span class="hint">kept ✓</span>';
-        toast(card.dataset.target === 'claude' ? 'Saved to Claude feedback' : 'Added to your voice');
+        const where = { voice: 'Added to your voice', memory: 'Added to your memory', feedback: 'Saved as a guardrail to avoid' }[resp.where] || 'Kept';
+        toast(where);
       } catch (e) { toast('Could not keep: ' + e.message); }
     });
     card.querySelector('.learn-dismiss').addEventListener('click', () => {

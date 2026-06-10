@@ -2009,8 +2009,10 @@ $('#mem-sync').addEventListener('click', async () => {
   btn.disabled = true;
   try {
     const r = await api.json('/api/memory/sync', { method: 'POST' });
-    $('#mem-sync-state').textContent = `Linked ${r.link} (${r.linkMode}); ${r.importMode}.`;
-    toast('Synced to ~/.claude');
+    $('#mem-sync-state').textContent = r.alreadyImported
+      ? `Linked ${r.link} (${r.linkMode}). It's already imported in ~/.claude/CLAUDE.md.`
+      : `Linked ${r.link} (${r.linkMode}). To share with your other Claude sessions, add this line to ~/.claude/CLAUDE.md yourself:  ${r.importLine}`;
+    toast('Profile linked into ~/.claude');
   } catch (e) {
     $('#mem-sync-state').textContent = 'Sync failed: ' + e.message;
     toast('Sync failed: ' + e.message);

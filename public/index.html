@@ -157,8 +157,8 @@
             </div>
             <div class="panel">
               <h3>Share with your Claude sessions</h3>
-              <p class="hint">Optional: link your profile into <code>~/.claude</code> so your other Claude Code sessions can read it too. This writes one line to <code>~/.claude/CLAUDE.md</code>.</p>
-              <button id="mem-sync" class="ghost">Sync to ~/.claude</button>
+              <p class="hint">Optional: symlink your profile to <code>~/.claude/USER.md</code>. To let your other Claude Code sessions read it, add <code>@USER.md</code> to <code>~/.claude/CLAUDE.md</code> yourself — doc-editor won't edit that file for you (auto-importing it would pull the whole profile into the editor's own calls).</p>
+              <button id="mem-sync" class="ghost">Link to ~/.claude</button>
               <p id="mem-sync-state" class="hint"></p>
             </div>
           </aside>

@@ -325,16 +325,19 @@ store is built (step 2), wired into generate/revise (step 3), fed by intake capt
   Haiku-scored pass is the noted seam). `compose(retrieved,{usePersonalFacts})` builds
   the injected block carrying the guardrail: grounding is always on; *volunteering*
   private facts into the output is gated by the per-doc `usePersonalFacts` (default
-  off). This is the ONLY path memory takes into a prompt (hence the `--setting-sources`
-  exclusion above). The composed block is appended to the **writing system prompt**
+  off). This is the ONLY path memory takes into a prompt (which is why the projection
+  must not auto-load it — see the `~/.claude` note above). The composed block is appended to the **writing system prompt**
   (`generate()`/`revise()` take a `memory` param); the per-doc gate flips via
   `PUT /api/docs/:id/use-personal-facts`; and `GET /api/docs/:id/context` exposes
   exactly "what this draft will use" (voice + retrieved profile/topics + the gate)
   for the transparency panel. Empty store ⇒ empty block ⇒ no-op (back-compatible).
 - **Projection (`syncToClaudeDir`, consented):** symlinks `USER.md` →
-  `~/.claude/USER.md` and adds an idempotent `@USER.md` import to `~/.claude/CLAUDE.md`
-  so the user's OTHER Claude sessions benefit. Decision A — it edits a file outside the
-  store, so it must be user-consented; overridable target via `DOC_EDITOR_CLAUDE_DIR`.
+  `~/.claude/USER.md` only (which Claude Code does NOT auto-load, so it can't leak into
+  the editor's own writing calls). It returns the `@USER.md` import line for the user to
+  add to `~/.claude/CLAUDE.md` **themselves** if they want their other sessions to read
+  the profile — doc-editor deliberately does **not** write that import (auto-loading the
+  profile would bypass the guardrail, and the `--setting-sources` flag that used to
+  suppress it broke some installs). Overridable target via `DOC_EDITOR_CLAUDE_DIR`.
 - **UI (Profile tab, `#/profile`):** about-you (view/edit `USER.md`), the unsaved
   keep/discard queue, kept facts (forget), **clickable topic chips** (a modal to
   view/edit/delete each topic file — step 6), and the consented "Sync to ~/.claude"
@@ -380,18 +383,17 @@ All flags live in `lib/claude.js`. Things that are load-bearing:
   to the project cwd.** Attachment files (under the project) are reached via
   `--add-dir <doc's asset dir>`, passed only when references are present, since
   we're no longer in the project tree.
-- **Writing spawns pass `--setting-sources project,local` (load-bearing).** This
-  loads only the project+local setting/memory sources and excludes `user`, so the
-  USER-level `~/.claude/CLAUDE.md` (and its `@USER.md` personal-memory import) is
-  **not** auto-loaded into writing calls — `RUN_DIR` only ever blocked the *project*
-  CLAUDE.md. The personal-memory profile must enter the prompt **only** via the
-  guardrailed `memory.compose()` path (see `lib/memory.js`), never as an un-scoped
-  auto-load that would also bypass the leakage guardrail. **Do NOT switch to
-  `--bare`**: it skips keychain reads and breaks subscription auth (`apiKeySource:
-  none` → "Not logged in"); `--setting-sources` leaves auth untouched (verified).
-  Subtlety: this also skips the user's *settings.json* for writing calls (model/
-  effort/permissions), which is fine — those calls are fully parameterized by the
-  app. (Mail spawns keep all sources; they need user-level MCP config.)
+- **Keeping the USER-level `~/.claude/CLAUDE.md` out of writing calls.** `RUN_DIR`
+  blocks the *project* CLAUDE.md, but the *user* one auto-loads regardless of cwd. We
+  briefly passed `--setting-sources project,local` to exclude it, then removed it —
+  **that flag is incompatible with some `claude` installs** (and `--bare` is out too:
+  it skips keychain reads and breaks subscription auth). So instead we ensure there is
+  **nothing to exclude**: `memory.syncToClaudeDir()` only **symlinks `~/.claude/USER.md`**
+  (which Claude Code does NOT auto-load) and does **not** write an `@USER.md` import
+  into `~/.claude/CLAUDE.md`. The user adds that import themselves if they want their
+  other sessions to read the profile. So the profile still enters doc-editor's prompts
+  **only** via the guardrailed `memory.compose()` path. (Mail spawns are separate in
+  `lib/mail.js` and unaffected.)
 
 ## Export (`lib/export.js`, `GET /api/docs/:id/export?format=…`)
 

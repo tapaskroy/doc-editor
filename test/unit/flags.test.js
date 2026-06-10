@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { modelEffortArgs, toolArgs, formatRequest } = require('../../lib/claude');
+const { modelEffortArgs, toolArgs, formatRequest, helpMentionsModel } = require('../../lib/claude');
 
 test('modelEffortArgs passes through whitelisted values', () => {
   assert.deepEqual(modelEffortArgs({ model: 'opus', effort: 'high' }), [
@@ -10,6 +10,16 @@ test('modelEffortArgs passes through whitelisted values', () => {
   ]);
   assert.deepEqual(modelEffortArgs({ model: 'sonnet' }), ['--model', 'sonnet']);
   assert.deepEqual(modelEffortArgs({ model: 'fable' }), ['--model', 'fable']);
+});
+
+test('helpMentionsModel detects an advertised model alias in --help text', () => {
+  const withFable = "  --model <model>   Provide an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet')";
+  const withoutFable = "  --model <model>   Provide an alias for the latest model (e.g. 'opus' or 'sonnet')";
+  assert.equal(helpMentionsModel(withFable, 'fable'), true);
+  assert.equal(helpMentionsModel(withoutFable, 'fable'), false);
+  assert.equal(helpMentionsModel(withFable, 'opus'), true);
+  assert.equal(helpMentionsModel('', 'fable'), false);
+  assert.equal(helpMentionsModel(withFable, ''), false);
 });
 
 test('modelEffortArgs drops unknown / empty values', () => {

@@ -2049,7 +2049,27 @@ $('#mem-use-facts').addEventListener('change', async () => {
   }
 });
 
+// Hide model options the installed CLI can't run (e.g. Fable on an older CLI), so
+// selecting one can never fail mid-draft. Best-effort: if the check fails, leave the
+// dropdown untouched. If the saved choice is now unavailable, fall back to Default.
+async function gateModels() {
+  let models;
+  try { ({ models } = await api.json('/api/models')); } catch { return; }
+  if (!Array.isArray(models)) return;
+  $('#sel-model').querySelectorAll('option[value]').forEach((o) => {
+    if (o.value && !models.includes(o.value)) {
+      o.remove();
+      if (settings.model === o.value) {
+        settings.model = '';
+        localStorage.removeItem('de.model');
+        $('#sel-model').value = '';
+      }
+    }
+  });
+}
+
 // boot
 initPicker();
 loadSkills();
+gateModels();
 route();

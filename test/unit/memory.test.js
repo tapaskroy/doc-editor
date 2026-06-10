@@ -141,29 +141,35 @@ test('compose carries the guardrail; usePersonalFacts flips volunteering; empty 
   assert.match(on, /WHAT IS TRUE ABOUT THE USER/);
 });
 
-test('syncToClaudeDir symlinks USER.md and adds an idempotent @USER.md import', () => {
+test('syncToClaudeDir symlinks USER.md but does NOT write ~/.claude/CLAUDE.md', () => {
   mem.writeProfile('# USER.md\n- hi\n');
   const r1 = mem.syncToClaudeDir();
   assert.equal(r1.ok, true);
   const link = path.join(CLA, 'USER.md');
   assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
   assert.equal(fs.readlinkSync(link), mem.PROFILE_PATH);
-  assert.match(fs.readFileSync(path.join(CLA, 'CLAUDE.md'), 'utf8'), /^@USER\.md$/m);
+  // We must NOT create/modify CLAUDE.md (auto-import would re-load the profile into
+  // the editor's own writing calls). It hands back the line for the user to add.
+  assert.equal(fs.existsSync(path.join(CLA, 'CLAUDE.md')), false);
+  assert.equal(r1.importLine, '@USER.md');
+  assert.equal(r1.alreadyImported, false);
 
-  // idempotent: second run adds nothing
+  // idempotent: a second run just re-points the symlink, still no CLAUDE.md
   const r2 = mem.syncToClaudeDir();
-  assert.equal(r2.importMode, 'import-present');
-  const occurrences = (fs.readFileSync(path.join(CLA, 'CLAUDE.md'), 'utf8').match(/@USER\.md/g) || []).length;
-  assert.equal(occurrences, 1);
+  assert.equal(r2.ok, true);
+  assert.equal(fs.existsSync(path.join(CLA, 'CLAUDE.md')), false);
 });
 
-test('syncToClaudeDir appends to an existing CLAUDE.md without clobbering it', () => {
+test('syncToClaudeDir never touches an existing CLAUDE.md; reports alreadyImported', () => {
   mem.writeProfile('# USER.md\n- hi\n');
   fs.writeFileSync(path.join(CLA, 'CLAUDE.md'), '# My global instructions\n\nBe concise.\n');
   const r = mem.syncToClaudeDir();
-  assert.equal(r.importMode, 'import-appended');
+  assert.equal(r.alreadyImported, false); // user hasn't added the import
   const cm = fs.readFileSync(path.join(CLA, 'CLAUDE.md'), 'utf8');
-  assert.match(cm, /My global instructions/); // preserved
-  assert.match(cm, /Be concise\./); // preserved
-  assert.match(cm, /^@USER\.md$/m); // added
+  assert.equal(cm, '# My global instructions\n\nBe concise.\n'); // byte-for-byte unchanged
+
+  // if the user HAS added @USER.md themselves, we detect it (and still don't edit)
+  fs.writeFileSync(path.join(CLA, 'CLAUDE.md'), '# Mine\n\n@USER.md\n');
+  assert.equal(mem.syncToClaudeDir().alreadyImported, true);
+  assert.equal(fs.readFileSync(path.join(CLA, 'CLAUDE.md'), 'utf8'), '# Mine\n\n@USER.md\n'); // unchanged
 });

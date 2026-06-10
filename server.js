@@ -77,6 +77,14 @@ app.get('/api/skills', (req, res) => {
   res.json(skills.list());
 });
 
+// Selectable models: the standard tiers, plus optional aliases (e.g. fable) ONLY
+// when the installed `claude` CLI actually advertises them — so the picker can't
+// offer a model that would error on draft. The client hides any unlisted option.
+app.get('/api/models', async (req, res) => {
+  const fable = await claude.modelAliasSupported('fable');
+  res.json({ models: ['opus', 'sonnet', 'haiku', ...(fable ? ['fable'] : [])] });
+});
+
 app.post('/api/docs', async (req, res) => {
   const { premise = '', intake, intakeUsage, model, effort, kind, email, voice } = req.body || {};
   // Persist the raw planning transcript on the doc so generation can ground on it

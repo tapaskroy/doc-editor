@@ -9,6 +9,7 @@ test('modelEffortArgs passes through whitelisted values', () => {
     '--model', 'opus', '--effort', 'high',
   ]);
   assert.deepEqual(modelEffortArgs({ model: 'sonnet' }), ['--model', 'sonnet']);
+  assert.deepEqual(modelEffortArgs({ model: 'fable' }), ['--model', 'fable']);
 });
 
 test('modelEffortArgs drops unknown / empty values', () => {

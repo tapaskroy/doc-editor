@@ -1631,6 +1631,21 @@ $('#doc').addEventListener('mouseup', () => {
   popover.classList.remove('hidden');
 });
 
+// Make links in the document clickable. The document is contentEditable, so browsers
+// place the text cursor instead of following a link on click; we open it ourselves,
+// in a new tab. Only http(s)/mailto are opened (never javascript:/data:), and not
+// while the user is drag-selecting text (that's a comment selection, not a click).
+$('#doc').addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[href]');
+  if (!a || !$('#doc').contains(a)) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && sel.toString().trim()) return; // selecting, not clicking
+  const href = a.getAttribute('href') || '';
+  if (!/^(https?:|mailto:)/i.test(href.trim())) return; // safe schemes only
+  e.preventDefault();
+  window.open(href.trim(), '_blank', 'noopener,noreferrer');
+});
+
 $('#sel-comment-btn').addEventListener('click', () => {
   if (!pendingRange) return;
   const quote = pendingRange.toString().trim();

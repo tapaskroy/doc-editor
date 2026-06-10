@@ -9,7 +9,8 @@
     "dev": "node server.js",
     "test": "node --test test/unit/*.test.js",
     "test:smoke": "node test/smoke.js",
-    "test:ui": "node test/ui.js"
+    "test:ui": "node test/ui.js",
+    "test:links": "node test/links.js"
   },
   "dependencies": {
     "express": "^4.19.2",

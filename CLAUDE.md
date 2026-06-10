@@ -237,6 +237,12 @@ mutation sites: generation `onDone` ("Draft"/"Regenerated"), the revise route
 The rendered document (`#doc`) is `contentEditable` by default — the user types
 in place, Google-Docs style, and select-to-comment still works alongside it.
 
+- **Clickable links**: in a `contentEditable` region the browser places the cursor
+  instead of following a link, so a delegated `click` handler on `#doc` opens links
+  itself, in a new tab (`window.open(href, '_blank', 'noopener,noreferrer')`). Only
+  `http(s)`/`mailto` are opened (never `javascript:`/`data:`), and not while the user
+  is drag-selecting text (that's a comment selection). Guarded by `npm run test:links`.
+
 - **Autosave**: an `input` listener debounces (~1s) then converts the edited HTML
   back to Markdown with **`turndown`** (+ the GFM plugin, served from
   `node_modules` like `marked`) and `PUT /api/docs/:id/content` persists it. No

@@ -350,6 +350,19 @@ store is built (step 2), wired into generate/revise (step 3), fed by intake capt
   `GET|PUT|DELETE /api/memory/topic/:name`, `POST /api/memory/sync`, plus
   `GET /api/docs/:id/context` and `PUT /api/docs/:id/use-personal-facts`.
 
+### Voice-learning signal log (`lib/learnlog.js`) — M1 instrumentation
+
+The single biggest unproven assumption is that "learn from my edits" produces lessons
+the user actually keeps. To measure it, every keep/dismiss decision on a learn
+proposal is logged (append-only flat JSON, gitignored, `DOC_EDITOR_LEARNLOG_FILE`):
+`POST …/learn/apply` records a **kept** entry; a new `POST …/learn/dismiss` records a
+**dismissed** one (the negatives the UI used to throw away). `GET /api/learn/log`
+returns the keep-rate (overall + per class voice/context/claude) and the recent
+kept/dismissed corpus with each candidate's `observation` (the distilled evidence) —
+surfaced in the Profile tab's "Voice-learning signal" panel so the misses are
+readable. It's instrumentation only: no effect on the voice store. The point is a
+go/kill number for the loop before investing in cold-start import / multi-voice.
+
 The reviser also has a tolerant JSON extractor (handles stray text / code fences)
 and a single sterner retry, as belt-and-suspenders against occasional drift.
 

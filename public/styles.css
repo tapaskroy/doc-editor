@@ -622,3 +622,15 @@ button {
 .topic-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .topic-modal-body { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
 .topic-modal-body .mem-profile-text { min-height: 300px; }
+
+/* Voice-learning signal (Profile) */
+.learn-rate { font-size: 14px; font-weight: 600; }
+.learn-byclass { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 10px; }
+.learn-byclass .lc { font-size: 12px; color: var(--muted); }
+.learn-log { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.ll-item { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: baseline; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.ll-badge { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.ll-kept .ll-badge { color: #1d6b2a; }
+.ll-dismissed .ll-badge { color: #9d2a1a; }
+.ll-class { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.ll-obs { color: var(--ink); }

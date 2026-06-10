@@ -13,6 +13,7 @@ const skills = require('./lib/skills');
 const voicestore = require('./lib/voicestore');
 const memory = require('./lib/memory');
 const learn = require('./lib/learn');
+const learnlog = require('./lib/learnlog');
 const feedback = require('./lib/feedback');
 const attachments = require('./lib/attachments');
 const versions = require('./lib/versions');
@@ -157,8 +158,27 @@ app.post('/api/docs/:id/learn/propose', async (req, res) => {
 app.post('/api/docs/:id/learn/apply', (req, res) => {
   if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
   const { voiceId, candidate } = req.body || {};
-  const r = learn.applyCandidate(req.params.id, voiceId || docs.readMeta(req.params.id).voice || null, candidate);
+  const vid = voiceId || docs.readMeta(req.params.id).voice || null;
+  const r = learn.applyCandidate(req.params.id, vid, candidate);
+  // Record the KEEP for the voice-learning signal log (only if it actually applied).
+  if (r.ok) learnlog.add({ decision: 'kept', candidate, docId: req.params.id, voiceId: vid });
   res.status(r.ok ? 200 : 400).json(r);
+});
+
+// Record a DISMISS so the loop's keep-rate has a denominator (the negatives the UI
+// used to throw away). No-op on the voice store — purely instrumentation.
+app.post('/api/docs/:id/learn/dismiss', (req, res) => {
+  if (!docs.exists(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const { candidate, voiceId } = req.body || {};
+  const entry = learnlog.add({ decision: 'dismissed', candidate, docId: req.params.id, voiceId: voiceId || null });
+  res.json({ ok: !!entry });
+});
+
+// The voice-learning signal: keep-rate (overall + per class) and the recent
+// kept/dismissed corpus, for the Profile tab and analysis.
+app.get('/api/learn/log', (req, res) => {
+  const entries = learnlog.list();
+  res.json({ summary: learnlog.summary(), recent: entries.slice(-40).reverse() });
 });
 
 app.get('/api/feedback', (req, res) => {

@@ -47,6 +47,14 @@ fs.writeFileSync(LLOG, JSON.stringify({ entries: [
   { id: 'l_1', at: '2026-01-01T00:00:00Z', decision: 'kept', target: 'voice', subtype: null, observation: 'Prefers short, declarative sentences.', text: 'Prefer short sentences.', docId: 'd', voiceId: 'v' },
   { id: 'l_2', at: '2026-01-02T00:00:00Z', decision: 'dismissed', target: 'context', subtype: null, observation: 'A one-off detail, not a durable preference.', text: 'noise', docId: 'd', voiceId: 'v' },
 ] }, null, 2));
+// Isolated, seeded voice skill so the Profile's "Your voice" editor renders.
+const SKTMP = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-editor-ui-sk-'));
+fs.mkdirSync(path.join(SKTMP, 'house-voice'), { recursive: true });
+fs.writeFileSync(path.join(SKTMP, 'house-voice', 'SKILL.md'),
+  '---\nname: House voice\ndescription: a seeded voice for layout testing\n---\n\nWrite plainly and concretely. Quantify claims. Avoid filler.\n\n<!-- learned:start -->\n## Learned rules\n\n- Prefer plain verbs.\n<!-- learned:end -->\n');
+fs.writeFileSync(path.join(SKTMP, 'house-voice', 'voice.json'), JSON.stringify({ id: 'house-voice', lastReviewedAt: null, rules: [
+  { id: 'r_1', observation: 'You prefer plain verbs.', text: 'Prefer plain verbs.', layer: 'voice', status: 'active', confidence: 1, support: [], source: 'edits', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+] }, null, 2));
 fs.writeFileSync(path.join(MEMTMP, 'memory.json'), JSON.stringify({ items: [
   { id: 'm_q1', topic: 'profile', section: 'people', text: 'Has a spouse and one child.', status: 'unsaved', provenance: 'Learned from a planning conversation.', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: null },
   { id: 'm_k1', topic: 'profile', section: 'work', text: 'Works in software.', status: 'kept', provenance: '', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: '2026-01-02T00:00:00Z' },
@@ -142,7 +150,7 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
 (async () => {
   let server, browser;
   try {
-    server = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DOC_EDITOR_DOCS_DIR: TMP, DOC_EDITOR_MEMORY_DIR: MEMTMP, DOC_EDITOR_CLAUDE_DIR: CLATMP, DOC_EDITOR_LEARNLOG_FILE: LLOG }, stdio: 'inherit' });
+    server = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DOC_EDITOR_DOCS_DIR: TMP, DOC_EDITOR_MEMORY_DIR: MEMTMP, DOC_EDITOR_CLAUDE_DIR: CLATMP, DOC_EDITOR_LEARNLOG_FILE: LLOG, DOC_EDITOR_SKILLS_DIR: SKTMP }, stdio: 'inherit' });
     await waitForServer();
     log('server up on', BASE);
 
@@ -181,6 +189,16 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
       await sleep(300);
       record('profile', width, await page.evaluate(audit), { checkPage: full });
 
+      // "Your voice": select the seeded voice so the preamble editor + learned rules
+      // render, and re-audit (catches overflow/escape in the new panel).
+      await page.evaluate(() => {
+        const sel = document.getElementById('voice-pick');
+        sel.value = 'house-voice';
+        sel.dispatchEvent(new Event('change'));
+      });
+      await sleep(250);
+      record('profile (voice editor open)', width, await page.evaluate(audit), { checkPage: full });
+
       await page.close();
     }
 
@@ -192,6 +210,6 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
   } finally {
     if (browser) await browser.close().catch(() => {});
     if (server) server.kill();
-    for (const d of [TMP, MEMTMP, CLATMP]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
+    for (const d of [TMP, MEMTMP, CLATMP, SKTMP]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
   }
 })();

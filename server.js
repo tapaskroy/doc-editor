@@ -78,6 +78,25 @@ app.get('/api/skills', (req, res) => {
   res.json(skills.list());
 });
 
+// A voice's editable content: the human PREAMBLE (user-owned) + the active learned
+// rules (read-only mirror of voice.json). The Profile tab's "Your voice" editor reads
+// this. (`voicestore`/`skills` reduce the id to a basename, so no path traversal.)
+app.get('/api/voices/:id', (req, res) => {
+  const id = req.params.id;
+  const preamble = voicestore.preamble(id);
+  if (preamble == null) return res.status(404).json({ error: 'voice not found' });
+  const rules = voicestore.listRules(id).filter((r) => r.status === 'active' && r.layer === 'voice').map((r) => ({ text: r.text, observation: r.observation }));
+  res.json({ id, preamble, rules });
+});
+
+// Save the human preamble. Frontmatter + the managed learned-rules block (from
+// voice.json) are preserved/re-rendered — only the preamble is the user's to edit.
+app.put('/api/voices/:id/preamble', (req, res) => {
+  const ok = voicestore.setPreamble(req.params.id, (req.body || {}).text || '');
+  if (!ok) return res.status(404).json({ error: 'voice not found' });
+  res.json({ ok: true });
+});
+
 // Selectable models: the standard tiers, plus optional aliases (e.g. fable) ONLY
 // when the installed `claude` CLI actually advertises them — so the picker can't
 // offer a model that would error on draft. The client hides any unlisted option.

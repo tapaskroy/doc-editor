@@ -80,3 +80,25 @@ test('docs.create sets voice:null; create({voice}) carries it; setVoice updates/
   assert.equal(docs.readMeta(m.id).voice, 'v1');
   assert.equal(docs.setVoice(m.id, null).voice, null);
 });
+
+test('setPreamble replaces the preamble, preserves frontmatter, re-renders the block', () => {
+  writeVoice('v2', '# V2\n\nOriginal preamble.');
+  voicestore.addRule('v2', { text: 'Use short sentences.', status: 'active' });
+  assert.equal(voicestore.compose('v2'), '# V2\n\nOriginal preamble.\n\n## Learned rules\n\n- Use short sentences.');
+
+  assert.equal(voicestore.setPreamble('v2', 'Brand new preamble.\nSecond line.'), true);
+  assert.equal(voicestore.preamble('v2'), 'Brand new preamble.\nSecond line.');
+
+  const raw = fs.readFileSync(path.join(SK, 'v2', 'SKILL.md'), 'utf8');
+  assert.match(raw, /^---\nname: v2\ndescription: test voice\n---/); // frontmatter preserved
+  assert.match(raw, /Brand new preamble\./);                          // new preamble written
+  assert.match(raw, /## Learned rules\n\n- Use short sentences\./);    // block re-rendered from voice.json
+  assert.doesNotMatch(raw, /Original preamble/);                       // old preamble gone
+
+  // compose stays authoritative: new preamble + the active rule from voice.json
+  assert.equal(voicestore.compose('v2'), 'Brand new preamble.\nSecond line.\n\n## Learned rules\n\n- Use short sentences.');
+});
+
+test('setPreamble returns false for an unknown voice', () => {
+  assert.equal(voicestore.setPreamble('does-not-exist', 'x'), false);
+});

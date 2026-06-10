@@ -194,6 +194,18 @@ revise (body); the server resolves it via `skills.read(id)` to the SKILL.md body
 (frontmatter stripped) and `claude.styleNote()` appends it to the writing system
 prompt as a "voice & style guide" governing *how* it writes, not *what*.
 
+**Editing a voice (Profile tab → "Your voice").** A voice = a human **preamble** (the
+part the user authors) + the managed **"Learned rules"** block (a deterministic mirror
+of `voice.json`'s active rules — `voice.json` is authoritative). The Profile editor
+lets the user edit the **preamble only**: `GET /api/voices/:id` returns
+`{preamble, rules}` (rules read-only); `PUT /api/voices/:id/preamble` →
+`voicestore.setPreamble(id, text)` rewrites the preamble while **preserving the YAML
+frontmatter and re-rendering the managed block from `voice.json`**. The learned-rules
+block is intentionally NOT editable there — editing it would be overwritten on the
+next rule-keep (the split-brain `compose()` avoids by reading rules from `voice.json`,
+not the SKILL.md text). Guarded by `npm run test:voice`. (Distinct from the top-bar
+Style picker, which *applies* a voice to a doc; this *manages* a voice's content.)
+
 Notes:
 - Injection (read the file → append to the system prompt) is the right approach
   here because generation runs headless with `--tools none` and a replaced

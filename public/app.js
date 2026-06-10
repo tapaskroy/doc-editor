@@ -1860,6 +1860,11 @@ function renderLearn(r) {
     });
     card.querySelector('.learn-dismiss').addEventListener('click', () => {
       card.querySelector('.learn-actions').innerHTML = '<span class="hint">dismissed</span>';
+      // Record the dismissal so the keep-rate has a denominator (fire-and-forget).
+      api.json(`/api/docs/${currentId}/learn/dismiss`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voiceId: r.voiceId, candidate: cand }),
+      }).catch(() => {});
     });
   });
 }
@@ -1897,6 +1902,31 @@ async function showProfile() {
   } catch (e) {
     toast('Could not load memory: ' + e.message);
   }
+  // Voice-learning signal (independent of memory; don't block the rest on it).
+  try { renderLearnLog(await api.json('/api/learn/log')); }
+  catch { $('#learn-stats').textContent = ''; $('#learn-log').innerHTML = '<li class="hint">Could not load.</li>'; }
+}
+
+function renderLearnLog(data) {
+  const s = data.summary || { kept: 0, dismissed: 0, total: 0, keepRate: null, byClass: {} };
+  $('#learn-keeprate').textContent = s.total ? `${Math.round((s.keepRate || 0) * 100)}% kept` : '—';
+  $('#learn-stats').innerHTML = s.total
+    ? `<div class="learn-rate">${s.kept} kept · ${s.dismissed} dismissed of ${s.total} reviewed</div>` +
+      '<div class="learn-byclass">' + Object.entries(s.byClass).map(([c, v]) => {
+        const t = (v.kept || 0) + (v.dismissed || 0);
+        return `<span class="lc">${escapeHtml(c)}: ${v.kept || 0}/${t}</span>`;
+      }).join('') + '</div>'
+    : '<p class="hint">No data yet. Use "Learn from my edits" in a document, then keep or dismiss the proposals.</p>';
+  const recent = data.recent || [];
+  $('#learn-log').innerHTML = recent.length
+    ? recent.map((e) => (
+        `<li class="ll-item ll-${e.decision}">` +
+          `<span class="ll-badge">${e.decision === 'kept' ? 'kept ✓' : 'dismissed ✕'}</span>` +
+          `<span class="ll-class">${escapeHtml(e.target)}</span>` +
+          `<span class="ll-obs">${escapeHtml(e.observation || e.text)}</span>` +
+        `</li>`
+      )).join('')
+    : '';
 }
 
 function renderMemory(data) {

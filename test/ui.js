@@ -41,6 +41,12 @@ fs.writeFileSync(path.join(MEMTMP, 'USER.md'),
   '## Taste\n- Enjoys historical and geopolitical nonfiction, and the occasional long essay.\n');
 fs.mkdirSync(path.join(MEMTMP, 'topics'), { recursive: true });
 fs.writeFileSync(path.join(MEMTMP, 'topics', 'travel.md'), '# Travel\n\n- Home base is a large metro area; several trips abroad each year.\n');
+// Isolated, seeded voice-learning log so the Profile's signal panel renders rows.
+const LLOG = path.join(MEMTMP, 'learnlog.json');
+fs.writeFileSync(LLOG, JSON.stringify({ entries: [
+  { id: 'l_1', at: '2026-01-01T00:00:00Z', decision: 'kept', target: 'voice', subtype: null, observation: 'Prefers short, declarative sentences.', text: 'Prefer short sentences.', docId: 'd', voiceId: 'v' },
+  { id: 'l_2', at: '2026-01-02T00:00:00Z', decision: 'dismissed', target: 'context', subtype: null, observation: 'A one-off detail, not a durable preference.', text: 'noise', docId: 'd', voiceId: 'v' },
+] }, null, 2));
 fs.writeFileSync(path.join(MEMTMP, 'memory.json'), JSON.stringify({ items: [
   { id: 'm_q1', topic: 'profile', section: 'people', text: 'Has a spouse and one child.', status: 'unsaved', provenance: 'Learned from a planning conversation.', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: null },
   { id: 'm_k1', topic: 'profile', section: 'work', text: 'Works in software.', status: 'kept', provenance: '', source: 'intake', sensitivity: 'normal', createdAt: '2026-01-01T00:00:00Z', keptAt: '2026-01-02T00:00:00Z' },
@@ -136,7 +142,7 @@ function setBtn(args) { const [id, text, disabled] = args; const el = document.g
 (async () => {
   let server, browser;
   try {
-    server = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DOC_EDITOR_DOCS_DIR: TMP, DOC_EDITOR_MEMORY_DIR: MEMTMP, DOC_EDITOR_CLAUDE_DIR: CLATMP }, stdio: 'inherit' });
+    server = spawn('node', [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DOC_EDITOR_DOCS_DIR: TMP, DOC_EDITOR_MEMORY_DIR: MEMTMP, DOC_EDITOR_CLAUDE_DIR: CLATMP, DOC_EDITOR_LEARNLOG_FILE: LLOG }, stdio: 'inherit' });
     await waitForServer();
     log('server up on', BASE);
 

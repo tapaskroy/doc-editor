@@ -1922,7 +1922,44 @@ async function showProfile() {
   // Voice-learning signal (independent of memory; don't block the rest on it).
   try { renderLearnLog(await api.json('/api/learn/log')); }
   catch { $('#learn-stats').textContent = ''; $('#learn-log').innerHTML = '<li class="hint">Could not load.</li>'; }
+  loadVoicePicker();
 }
+
+// "Your voice": populate the dropdown from the available voices; selecting one loads
+// its preamble (editable) + learned rules (read-only) into the editor.
+async function loadVoicePicker() {
+  let list = [];
+  try { list = await api.json('/api/skills'); } catch { return; }
+  const sel = $('#voice-pick');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select a voice…</option>' +
+    list.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name + (s.source === 'project' ? ' (project)' : ''))}</option>`).join('');
+  // keep the selection if it still exists, else collapse the editor
+  if (cur && list.some((s) => s.id === cur)) sel.value = cur;
+  else $('#voice-editor').classList.add('hidden');
+}
+$('#voice-pick').addEventListener('change', async () => {
+  const id = $('#voice-pick').value;
+  if (!id) { $('#voice-editor').classList.add('hidden'); return; }
+  try {
+    const v = await api.json(`/api/voices/${encodeURIComponent(id)}`);
+    $('#voice-preamble').value = v.preamble || '';
+    $('#voice-rules').innerHTML = (v.rules || []).length
+      ? v.rules.map((r) => `<li>${escapeHtml(r.text)}</li>`).join('')
+      : '<li class="hint">No learned rules yet — they appear here as you keep voice lessons.</li>';
+    $('#voice-save-state').textContent = '';
+    $('#voice-editor').classList.remove('hidden');
+  } catch (e) { toast('Could not load voice: ' + e.message); }
+});
+$('#voice-save').addEventListener('click', async () => {
+  const id = $('#voice-pick').value;
+  if (!id) return;
+  try {
+    await api.json(`/api/voices/${encodeURIComponent(id)}/preamble`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: $('#voice-preamble').value }) });
+    $('#voice-save-state').textContent = 'Saved.';
+    toast('Voice updated');
+  } catch (e) { toast('Could not save: ' + e.message); }
+});
 
 function renderLearnLog(data) {
   const s = data.summary || { kept: 0, dismissed: 0, total: 0, keepRate: null, byClass: {} };

@@ -146,6 +146,21 @@
             </div>
 
             <div class="panel">
+              <h3>Your voice</h3>
+              <p class="hint">How a voice writes. You own the <strong>preamble</strong> (edit it freely); the <em>learned rules</em> below are managed by the editor from your edits. Changes apply everywhere this voice is used (it's a portable skill in <code>~/.claude/skills</code>). This is separate from the top-bar Style picker, which just applies a voice to the open document.</p>
+              <select id="voice-pick"><option value="">Select a voice…</option></select>
+              <div id="voice-editor" class="hidden">
+                <textarea id="voice-preamble" class="mem-profile-text" spellcheck="false" placeholder="Write the voice's guidance here…"></textarea>
+                <div class="mem-edit-actions">
+                  <button id="voice-save" class="primary">Save</button>
+                  <span id="voice-save-state" class="hint"></span>
+                </div>
+                <h4 class="voice-rules-h">Learned rules <span class="hint">(managed — from your edits)</span></h4>
+                <ul id="voice-rules" class="voice-rules"></ul>
+              </div>
+            </div>
+
+            <div class="panel">
               <h3>Voice-learning signal <span id="learn-keeprate" class="count">—</span></h3>
               <p class="hint">When you "Learn from my edits," what the editor proposed vs. what you kept. This is how we tell whether the loop produces lessons worth keeping — read the dismissed ones to see where it's noisy.</p>
               <div id="learn-stats" class="learn-stats"></div>

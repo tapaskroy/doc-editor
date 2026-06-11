@@ -634,3 +634,12 @@ button {
 .ll-dismissed .ll-badge { color: #9d2a1a; }
 .ll-class { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .ll-obs { color: var(--ink); }
+
+/* Your voice (Profile) */
+#voice-pick { width: 100%; max-width: 360px; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); margin: 6px 0 10px; cursor: pointer; }
+#voice-pick:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+#voice-editor .mem-profile-text { min-height: 220px; }
+.voice-rules-h { font-size: 13px; margin: 14px 0 4px; }
+.voice-rules { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.voice-rules li { font-size: 13px; line-height: 1.4; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.voice-rules li.hint { border: none; background: none; padding: 4px 0; }
